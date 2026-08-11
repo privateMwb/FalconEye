@@ -58,7 +58,7 @@ inline JsonPro::Json metricEntryToJson(const MetricEntry& entry) {
  * `avgResponseMs`, and `recentRequests` (oldest first).
  */
 inline JsonPro::Json metricsToJson(const Metrics& metrics) {
-    VectorPro::Vector<MetricEntry> entries = metrics.entries();
+    const VectorPro::Vector<MetricEntry> entries = metrics.entries();
 
     double totalMs = 0.0;
     int errorCount = 0;

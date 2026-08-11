@@ -30,8 +30,8 @@
 #include <JsonPro/Json.h>   // JsonPro::Json
 // clang-format on
 
-#include "Metrics.h"             // Metrics
-#include "MetricsJson.h"         // metricsToJson()
+#include "Metrics.h"              // Metrics
+#include "MetricsJson.h"          // metricsToJson()
 #include "routes/ExampleRoutes.h" // registerExampleRoutes()
 
 #include <iostream> // std::cerr, std::cout
@@ -62,7 +62,7 @@ int main() {
                  });
     if (createStatus != MiniDB::Common::Status::OK) {
         std::cerr << "Failed to create 'todos' table: "
-                   << MiniDB::Common::statusToString(createStatus) << "\n";
+                  << MiniDB::Common::statusToString(createStatus) << "\n";
         return 1;
     }
 
@@ -77,8 +77,8 @@ int main() {
     seedRecord.setField("done", JsonPro::Json(false));
     const MiniDB::Common::Status insertStatus = todosTable->insertRecord(seedRecord);
     if (insertStatus != MiniDB::Common::Status::OK) {
-        std::cerr << "Failed to seed 'todos' row: "
-                   << MiniDB::Common::statusToString(insertStatus) << "\n";
+        std::cerr << "Failed to seed 'todos' row: " << MiniDB::Common::statusToString(insertStatus)
+                  << "\n";
         return 1;
     }
 
@@ -93,11 +93,11 @@ int main() {
     // Real /api/metrics endpoint. Registered on the same Router that
     // Metrics itself reads from -- fine, since this route returns
     // Metrics's own recorded data, not routing metadata.
-    router.get("/api/metrics",
-               [&metrics](const FalconHTTP::HTTP::HttpRequest&, FalconHTTP::HTTP::HttpResponse& response) {
-                   response.setStatus(FalconHTTP::HTTP::HttpStatus::Ok);
-                   response.setJson(metricsToJson(metrics));
-               });
+    router.get("/api/metrics", [&metrics](const FalconHTTP::HTTP::HttpRequest&,
+                                          FalconHTTP::HTTP::HttpResponse& response) {
+        response.setStatus(FalconHTTP::HTTP::HttpStatus::Ok);
+        response.setJson(metricsToJson(metrics));
+    });
 
     // --- Server + middleware chain ----------------------------------------
     FalconHTTP::Core::Server server(router, /*threadCount=*/4);

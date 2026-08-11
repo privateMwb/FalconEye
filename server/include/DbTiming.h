@@ -70,13 +70,11 @@ inline VectorPro::Vector<std::pair<std::string, double>>& currentRequestBreakdow
  * call.
  * @return Whatever `fn` returns.
  */
-template <typename Fn>
-auto timedCall(const char* label, Fn&& fn) {
+template <typename Fn> auto timedCall(const char* label, Fn&& fn) {
     auto start = std::chrono::steady_clock::now();
     auto result = fn();
-    const double ms = std::chrono::duration<double, std::milli>(
-                           std::chrono::steady_clock::now() - start)
-                           .count();
+    const double ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     currentRequestBreakdown().push_back({label, ms});
     return result;
 }
