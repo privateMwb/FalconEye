@@ -22,19 +22,19 @@
 #include <FalconHTTP/Middleware/Recovery.h> // Recovery
 #include <FalconHTTP/Routing/Router.h>      // Router
 
-#include <MiniDB/Core/Database.h>       // Database
-#include <MiniDB/Common/Type.h>         // ColumnDef, ColumnType
-#include <MiniDB/Engine/QueryEngine.h>  // QueryEngine
+#include <MiniDB/Core/Database.h>     // Database
+#include <MiniDB/Common/Type.h>       // ColumnDef, ColumnType
+#include <MiniDB/Engine/QueryEngine.h> // QueryEngine
 
 #include <ArenaPro/Arena.h> // Arena
 #include <JsonPro/Json.h>   // JsonPro::Json
+// clang-format on
 
-#include "Metrics.h"              // Metrics
-#include "MetricsJson.h"          // metricsToJson()
+#include "Metrics.h"             // Metrics
+#include "MetricsJson.h"         // metricsToJson()
 #include "routes/ExampleRoutes.h" // registerExampleRoutes()
 
 #include <iostream> // std::cerr, std::cout
-// clang-format on
 
 /// @brief FalconEye server entry point. Wires Router, Database,
 /// QueryEngine, Metrics, and the middleware chain together, then starts
@@ -42,7 +42,11 @@
 int main() {
     // --- Data layer -----------------------------------------------------
     // Arena backing QueryEngine's per-call scratch allocations.
-    ArenaPro::Arena<> queryArena(1024 * 1024); // 1 MiB scratch space
+    // Cast makes the multiplication's result type explicit before the
+    // widening conversion to size_t — 1024*1024 can't actually overflow
+    // int here, but the cast documents intent instead of relying on
+    // an implicit, unchecked widen.
+    ArenaPro::Arena<> queryArena(static_cast<std::size_t>(1024) * 1024); // 1 MiB scratch space
 
     MiniDB::Core::Database db("falconeye");
 
@@ -51,14 +55,14 @@ int main() {
     // column -- Record::id is tracked separately from `data` and isn't
     // checked against `schema` by validate(). Replace with a real schema
     // once available.
-    MiniDB::Common::Status createStatus = db.createTable(
+    const MiniDB::Common::Status createStatus = db.createTable(
         "todos", {
                      MiniDB::Common::ColumnDef{"title", MiniDB::Common::ColumnType::STRING, false},
                      MiniDB::Common::ColumnDef{"done", MiniDB::Common::ColumnType::BOOL, false},
                  });
     if (createStatus != MiniDB::Common::Status::OK) {
         std::cerr << "Failed to create 'todos' table: "
-                  << MiniDB::Common::statusToString(createStatus) << "\n";
+                   << MiniDB::Common::statusToString(createStatus) << "\n";
         return 1;
     }
 
@@ -69,12 +73,12 @@ int main() {
     }
 
     MiniDB::Core::Record seedRecord(/*id=*/1);
-    (void)seedRecord.setField("title", JsonPro::Json("Write the FalconEye README"));
-    (void)seedRecord.setField("done", JsonPro::Json(false));
-    MiniDB::Common::Status insertStatus = todosTable->insertRecord(seedRecord);
+    seedRecord.setField("title", JsonPro::Json("Write the FalconEye README"));
+    seedRecord.setField("done", JsonPro::Json(false));
+    const MiniDB::Common::Status insertStatus = todosTable->insertRecord(seedRecord);
     if (insertStatus != MiniDB::Common::Status::OK) {
-        std::cerr << "Failed to seed 'todos' row: " << MiniDB::Common::statusToString(insertStatus)
-                  << "\n";
+        std::cerr << "Failed to seed 'todos' row: "
+                   << MiniDB::Common::statusToString(insertStatus) << "\n";
         return 1;
     }
 
@@ -89,11 +93,11 @@ int main() {
     // Real /api/metrics endpoint. Registered on the same Router that
     // Metrics itself reads from -- fine, since this route returns
     // Metrics's own recorded data, not routing metadata.
-    router.get("/api/metrics", [&metrics](const FalconHTTP::HTTP::HttpRequest&,
-                                          FalconHTTP::HTTP::HttpResponse& response) {
-        response.setStatus(FalconHTTP::HTTP::HttpStatus::Ok);
-        response.setJson(metricsToJson(metrics));
-    });
+    router.get("/api/metrics",
+               [&metrics](const FalconHTTP::HTTP::HttpRequest&, FalconHTTP::HTTP::HttpResponse& response) {
+                   response.setStatus(FalconHTTP::HTTP::HttpStatus::Ok);
+                   response.setJson(metricsToJson(metrics));
+               });
 
     // --- Server + middleware chain ----------------------------------------
     FalconHTTP::Core::Server server(router, /*threadCount=*/4);

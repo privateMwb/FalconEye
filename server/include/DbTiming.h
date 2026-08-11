@@ -19,9 +19,9 @@
 // clang-format off
 #include <VectorPro/Vector.h> // VectorPro::Vector
 
-#include <chrono>   // std::chrono::steady_clock, std::chrono::duration
-#include <string>   // std::string
-#include <utility>  // std::pair
+#include <chrono> // std::chrono::steady_clock, std::chrono::duration
+#include <string> // std::string
+#include <utility> // std::pair
 // clang-format on
 
 /**
@@ -41,7 +41,12 @@
 /// `thread_local` because `Server` is thread-per-connection -- each
 /// pooled thread handles exactly one request start-to-finish, so no
 /// locking is needed here.
-inline thread_local VectorPro::Vector<std::pair<std::string, double>>* currentBreakdown_ = nullptr;
+///
+/// Named without a trailing underscore deliberately: that suffix is
+/// this project's convention for private class members (see
+/// .clang-tidy's PrivateMemberSuffix), and this is a namespace-scope
+/// global, not a member of any class.
+inline thread_local VectorPro::Vector<std::pair<std::string, double>>* currentBreakdown = nullptr;
 
 /**
  * @brief Returns the breakdown vector for the request currently in
@@ -49,12 +54,12 @@ inline thread_local VectorPro::Vector<std::pair<std::string, double>>* currentBr
  * @return Reference to the current request's breakdown vector.
  * @details Only valid while a request is being handled inside
  * `Metrics::operator()`'s `next()` call. Calling this outside that scope
- * (`currentBreakdown_ == nullptr`) is undefined behavior -- by design,
+ * (`currentBreakdown == nullptr`) is undefined behavior -- by design,
  * `timedCall()` is only ever meant to be used from within a route
  * handler.
  */
 inline VectorPro::Vector<std::pair<std::string, double>>& currentRequestBreakdown() {
-    return *currentBreakdown_;
+    return *currentBreakdown;
 }
 
 /**
@@ -65,11 +70,13 @@ inline VectorPro::Vector<std::pair<std::string, double>>& currentRequestBreakdow
  * call.
  * @return Whatever `fn` returns.
  */
-template <typename Fn> auto timedCall(const char* label, Fn&& fn) {
+template <typename Fn>
+auto timedCall(const char* label, Fn&& fn) {
     auto start = std::chrono::steady_clock::now();
     auto result = fn();
-    double ms =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    const double ms = std::chrono::duration<double, std::milli>(
+                           std::chrono::steady_clock::now() - start)
+                           .count();
     currentRequestBreakdown().push_back({label, ms});
     return result;
 }

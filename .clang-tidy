@@ -21,12 +21,22 @@ Checks: >
   -modernize-use-trailing-return-type,
   -readability-magic-numbers,
   -readability-identifier-length,
-  -misc-non-private-member-variables-in-classes
+  -misc-non-private-member-variables-in-classes,
+  -misc-include-cleaner
 
 # CI runs with --warnings-as-errors=*, so every enabled check above
 # blocks a build if triggered — keep this list intentionally narrower
 # than clang-tidy's full defaults, and widen it deliberately over time
 # rather than starting from everything and fighting false positives.
+#
+# misc-include-cleaner is disabled specifically: it demands a direct
+# #include for every symbol used anywhere, even ones already covered
+# by an umbrella header included with a side-comment explaining what
+# it provides (see the include blocks in server/include/*.h) — that
+# comment-per-include convention is the intentional documentation
+# mechanism here, and satisfying include-cleaner on top of it would
+# mean duplicating that information as redundant direct includes for
+# no real bug-catching benefit.
 
 WarningsAsErrors: ""
 

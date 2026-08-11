@@ -17,9 +17,9 @@
 #pragma once
 
 // clang-format off
-#include "Metrics.h"          // Metrics, MetricEntry
+#include "Metrics.h" // Metrics, MetricEntry
 
-#include <JsonPro/Json.h>     // JsonPro::Json
+#include <JsonPro/Json.h>    // JsonPro::Json
 #include <VectorPro/Vector.h> // VectorPro::Vector
 // clang-format on
 
@@ -39,10 +39,10 @@ inline JsonPro::Json metricEntryToJson(const MetricEntry& entry) {
 
     JsonPro::Json::ArrayType breakdownArr;
     breakdownArr.reserve(entry.breakdown.size());
-    for (std::size_t i = 0; i < entry.breakdown.size(); ++i) {
+    for (const auto& [name, ms] : entry.breakdown) {
         JsonPro::Json step = JsonPro::Json::ObjectType{};
-        step["name"] = entry.breakdown[i].first;
-        step["ms"] = entry.breakdown[i].second;
+        step["name"] = name;
+        step["ms"] = ms;
         breakdownArr.push_back(std::move(step));
     }
     obj["breakdown"] = std::move(breakdownArr);
@@ -62,18 +62,19 @@ inline JsonPro::Json metricsToJson(const Metrics& metrics) {
 
     double totalMs = 0.0;
     int errorCount = 0;
-    for (std::size_t i = 0; i < entries.size(); ++i) {
-        totalMs += entries[i].totalMs;
-        if (entries[i].status >= 400) {
+    for (const auto& entry : entries) {
+        totalMs += entry.totalMs;
+        if (entry.status >= 400) {
             ++errorCount;
         }
     }
-    double avgResponseMs = entries.size() > 0 ? totalMs / static_cast<double>(entries.size()) : 0.0;
+    const double avgResponseMs =
+        !entries.empty() ? totalMs / static_cast<double>(entries.size()) : 0.0;
 
     JsonPro::Json::ArrayType recentRequests;
     recentRequests.reserve(entries.size());
-    for (std::size_t i = 0; i < entries.size(); ++i) {
-        recentRequests.push_back(metricEntryToJson(entries[i]));
+    for (const auto& entry : entries) {
+        recentRequests.push_back(metricEntryToJson(entry));
     }
 
     JsonPro::Json root = JsonPro::Json::ObjectType{};

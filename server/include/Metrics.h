@@ -27,7 +27,7 @@
 #include <HashMapPro/HashMap.h> // HashMapPro::HashMap (PathMatcher's params out-param)
 #include <VectorPro/Vector.h>   // VectorPro::Vector
 
-#include "DbTiming.h" // currentBreakdown_, currentRequestBreakdown(), timedCall()
+#include "DbTiming.h" // currentBreakdown, currentRequestBreakdown(), timedCall()
 
 #include <atomic>      // std::atomic
 #include <chrono>      // std::chrono::steady_clock, std::chrono::system_clock
@@ -57,7 +57,7 @@
  */
 inline std::string currentTimestampIso8601() {
     auto now = std::chrono::system_clock::now();
-    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
 
     std::tm utcTm{};
 #if defined(_WIN32)
@@ -88,11 +88,11 @@ inline std::string currentTimestampIso8601() {
  * into `DbTiming.h`'s mechanism.
  */
 struct MetricEntry {
-    std::string route;     ///< Matched route pattern (e.g. "/api/todos/:id"),
-                           ///< or the raw path if nothing matched (404s).
-    std::string method;    ///< e.g. "GET", from `FalconHTTP::HTTP::methodToString()`.
-    int status = 0;        ///< HTTP status code.
-    double totalMs = 0.0;  ///< Total request duration in milliseconds.
+    std::string route;  ///< Matched route pattern (e.g. "/api/todos/:id"),
+                         ///< or the raw path if nothing matched (404s).
+    std::string method;  ///< e.g. "GET", from `FalconHTTP::HTTP::methodToString()`.
+    int status = 0;      ///< HTTP status code.
+    double totalMs = 0.0; ///< Total request duration in milliseconds.
     std::string timestamp; ///< ISO 8601 UTC. See `currentTimestampIso8601()`.
     VectorPro::Vector<std::pair<std::string, double>> breakdown; ///< dbQuery-type entries only.
 
@@ -126,7 +126,7 @@ class MetricsRingBuffer {
 
     /// @brief Records one entry, overwriting the oldest slot once full.
     void push(MetricEntry entry) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        const std::lock_guard<std::mutex> lock(mutex_);
         entries_[writeIndex_] = std::move(entry);
         writeIndex_ = (writeIndex_ + 1) % capacity_;
         if (filled_ < capacity_) {
@@ -144,7 +144,7 @@ class MetricsRingBuffer {
 
     /// @brief Returns all recorded entries, oldest first, newest last.
     [[nodiscard]] VectorPro::Vector<MetricEntry> entries() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        const std::lock_guard<std::mutex> lock(mutex_);
 
         VectorPro::Vector<MetricEntry> result(filled_, MetricEntry{});
         if (filled_ < capacity_) {
@@ -222,8 +222,8 @@ class Metrics {
 
     /// @brief Middleware entry point. Matches `MiddlewareFn`'s signature.
     void operator()(FalconHTTP::HTTP::HttpRequest& request,
-                    FalconHTTP::HTTP::HttpResponse& response,
-                    const FalconHTTP::Middleware::NextHandler& next) {
+                     FalconHTTP::HTTP::HttpResponse& response,
+                     const FalconHTTP::Middleware::NextHandler& next) {
         if (request.path() == "/api/metrics") {
             next(request, response);
             return;
@@ -236,43 +236,39 @@ class Metrics {
         // Point the thread-local breakdown pointer (DbTiming.h) at this
         // request's vector before entering the rest of the chain, so any
         // timedCall() made by a route handler on this thread lands here.
-        currentBreakdown_ = &breakdown;
+        currentBreakdown = &breakdown;
 
         try {
             next(request, response);
         } catch (...) {
-            currentBreakdown_ = nullptr;
+            currentBreakdown = nullptr;
             recordEntry(request, response, start, std::move(breakdown));
             throw;
         }
 
-        currentBreakdown_ = nullptr;
+        currentBreakdown = nullptr;
         recordEntry(request, response, start, std::move(breakdown));
     }
 
     /// @brief Returns the recorded entries, oldest first.
-    [[nodiscard]] VectorPro::Vector<MetricEntry> entries() const {
-        return buffer_->entries();
-    }
+    [[nodiscard]] VectorPro::Vector<MetricEntry> entries() const { return buffer_->entries(); }
 
     /// @brief Total requests handled since this Metrics instance was
     /// constructed -- NOT the ring buffer's current size, which is
     /// capped and overwrites oldest entries.
-    [[nodiscard]] std::uint64_t totalRequestCount() const noexcept {
-        return buffer_->totalPushed();
-    }
+    [[nodiscard]] std::uint64_t totalRequestCount() const noexcept { return buffer_->totalPushed(); }
 
   private:
     /// @brief Builds and pushes a MetricEntry for the request currently
     /// finishing. Shared by both the normal-return and exception paths in
     /// `operator()` so the recording logic isn't duplicated.
     void recordEntry(FalconHTTP::HTTP::HttpRequest& request,
-                     const FalconHTTP::HTTP::HttpResponse& response,
-                     std::chrono::steady_clock::time_point start,
-                     VectorPro::Vector<std::pair<std::string, double>> breakdown) {
-        double totalMs =
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
-                .count();
+                      const FalconHTTP::HTTP::HttpResponse& response,
+                      std::chrono::steady_clock::time_point start,
+                      VectorPro::Vector<std::pair<std::string, double>> breakdown) {
+        const double totalMs = std::chrono::duration<double, std::milli>(
+                                    std::chrono::steady_clock::now() - start)
+                                    .count();
 
         MetricEntry entry;
         entry.route = matchedPatternFor(request.path());
