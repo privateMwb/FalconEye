@@ -1,0 +1,4 @@
+sources:
+  "1.0.0":
+    url: "https://github.com/privateMwb/MiniDatabase.git"
+    commit: "f4c51cfc09cfe8b6824b5e9c43ca4ea92b0e6387"

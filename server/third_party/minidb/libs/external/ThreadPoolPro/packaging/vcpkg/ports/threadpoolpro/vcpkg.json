@@ -1,0 +1,11 @@
+{
+  "name": "threadpoolpro",
+  "version": "1.0.0",
+  "description": "Work-stealing C++ thread pool with lock-free per-worker queues, type-erased SBO task storage, and a lightweight Future replacing std::packaged_task/std::future.",
+  "homepage": "https://github.com/privateMwb/ThreadPoolPro",
+  "license": "MIT",
+  "dependencies": [
+    "vcpkg-cmake",
+    "vcpkg-cmake-config"
+  ]
+}

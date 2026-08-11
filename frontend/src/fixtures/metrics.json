@@ -1,0 +1,63 @@
+{
+  "requestCount": 214,
+  "errorCount": 3,
+  "avgResponseMs": 4.821,
+  "recentRequests": [
+    {
+      "route": "/api/todos/:id",
+      "method": "GET",
+      "status": 200,
+      "totalMs": 12.482,
+      "timestamp": "2026-08-11T09:41:02Z",
+      "breakdown": [{ "name": "dbQuery", "ms": 9.114 }]
+    },
+    {
+      "route": "/api/health",
+      "method": "GET",
+      "status": 200,
+      "totalMs": 0.081,
+      "timestamp": "2026-08-11T09:41:05Z",
+      "breakdown": []
+    },
+    {
+      "route": "/api/todos",
+      "method": "POST",
+      "status": 201,
+      "totalMs": 18.774,
+      "timestamp": "2026-08-11T09:41:09Z",
+      "breakdown": [{ "name": "dbQuery", "ms": 15.902 }]
+    },
+    {
+      "route": "/api/todos/:id",
+      "method": "GET",
+      "status": 404,
+      "totalMs": 3.207,
+      "timestamp": "2026-08-11T09:41:14Z",
+      "breakdown": [{ "name": "dbQuery", "ms": 1.884 }]
+    },
+    {
+      "route": "/api/metrics",
+      "method": "GET",
+      "status": 200,
+      "totalMs": 1.116,
+      "timestamp": "2026-08-11T09:41:18Z",
+      "breakdown": []
+    },
+    {
+      "route": "/api/todos/:id",
+      "method": "DELETE",
+      "status": 500,
+      "totalMs": 24.663,
+      "timestamp": "2026-08-11T09:41:23Z",
+      "breakdown": [{ "name": "dbQuery", "ms": 22.201 }]
+    },
+    {
+      "route": "/api/health",
+      "method": "GET",
+      "status": 200,
+      "totalMs": 0.093,
+      "timestamp": "2026-08-11T09:41:27Z",
+      "breakdown": []
+    }
+  ]
+}

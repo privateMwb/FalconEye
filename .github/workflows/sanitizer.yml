@@ -1,0 +1,131 @@
+# ============================================================
+# .github/workflows/sanitizers.yml
+# Boots falconeye_server under AddressSanitizer+
+# UndefinedBehaviorSanitizer, and separately under
+# ThreadSanitizer, then exercises a few real endpoints.
+#
+# This is a smoke test, not a sanitized test suite — server/
+# has no tests/ directory yet (see build.yml's comment on the
+# same gap), so there's nothing to run sanitized beyond booting
+# the server and hitting it with real requests. Still
+# meaningful: Metrics.h's ring buffer (std::mutex), atomic
+# request counter, and thread_local breakdown pointer are all
+# concurrency-sensitive code that ThreadSanitizer specifically
+# is well-suited to catch issues in — more so than the ASan/
+# UBSan pairing alone.
+#
+# ASan+UBSan can share one binary; ThreadSanitizer cannot be
+# combined with ASan in the same build, hence two separate
+# configure/build passes below.
+# ============================================================
+
+name: Sanitizers
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  asan-ubsan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang curl
+
+      - name: Configure
+        working-directory: server
+        env:
+          CXX: clang++
+          CXXFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
+          LDFLAGS: -fsanitize=address,undefined
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        working-directory: server
+        run: cmake --build build
+
+      - name: Boot server and exercise real endpoints
+        working-directory: server
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0
+        run: |
+          ./build/falconeye_server > server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+
+          curl -sf localhost:8080/api/health
+          curl -sf localhost:8080/api/todos/1
+          curl -sf localhost:8080/api/metrics
+          curl -sf localhost:8080/api/todos/999 || true # expected 404
+
+          kill -TERM "$SERVER_PID"
+          wait "$SERVER_PID" || true
+
+          cat server.log
+
+          if grep -qE "ERROR: (AddressSanitizer|UndefinedBehaviorSanitizer)" server.log; then
+            echo "Sanitizer reported an error — see log above."
+            exit 1
+          fi
+
+  tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang curl
+
+      - name: Configure
+        working-directory: server
+        env:
+          CXX: clang++
+          CXXFLAGS: -fsanitize=thread -fno-omit-frame-pointer -g -O1
+          LDFLAGS: -fsanitize=thread
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        working-directory: server
+        run: cmake --build build
+
+      - name: Boot server and exercise real endpoints concurrently
+        working-directory: server
+        env:
+          TSAN_OPTIONS: halt_on_error=0
+        run: |
+          ./build/falconeye_server > server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+
+          # Concurrent requests — the whole point of running under TSan is
+          # to exercise Metrics's ring buffer mutex, atomic counter, and
+          # thread_local breakdown pointer under real contention.
+          for i in $(seq 1 20); do
+            curl -sf localhost:8080/api/todos/1 > /dev/null &
+            curl -sf localhost:8080/api/health > /dev/null &
+          done
+          wait
+          curl -sf localhost:8080/api/metrics > /dev/null
+
+          kill -TERM "$SERVER_PID"
+          wait "$SERVER_PID" || true
+
+          cat server.log
+
+          if grep -q "WARNING: ThreadSanitizer" server.log; then
+            echo "ThreadSanitizer reported a data race — see log above."
+            exit 1
+          fi
