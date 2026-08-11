@@ -164,11 +164,23 @@ jobs:
           # a 4-thread pool under the heaviest instrumentation we run.
           # Every curl below has --max-time so a genuinely stuck request
           # fails in seconds, not silently forever.
+          #
+          # PIDs tracked explicitly and waited on individually — NOT a
+          # bare `wait`, which waits for every background job in this
+          # shell, including the server process backgrounded above
+          # (which never exits on its own). A bare `wait` here would
+          # deadlock the script itself waiting on a process it hasn't
+          # been told to stop yet.
+          CURL_PIDS=()
           for i in $(seq 1 5); do
             curl -sf --max-time 10 localhost:8080/api/todos/1 > /dev/null &
+            CURL_PIDS+=($!)
             curl -sf --max-time 10 localhost:8080/api/health > /dev/null &
+            CURL_PIDS+=($!)
           done
-          wait
+          for pid in "${CURL_PIDS[@]}"; do
+            wait "$pid" || true
+          done
           curl -sf --max-time 10 localhost:8080/api/metrics > /dev/null
 
           kill -TERM "$SERVER_PID" 2>/dev/null || true
