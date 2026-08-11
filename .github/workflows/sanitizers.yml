@@ -81,8 +81,18 @@ jobs:
           curl -sf --max-time 10 localhost:8080/api/metrics
           curl -sf --max-time 10 localhost:8080/api/todos/999 || true # expected 404
 
-          kill -TERM "$SERVER_PID"
-          wait "$SERVER_PID" || true
+          kill -TERM "$SERVER_PID" 2>/dev/null || true
+
+          # Bounded wait, not `wait "$SERVER_PID"` alone — see the tsan
+          # job's comment on why an unbounded wait is unsafe here.
+          for i in $(seq 1 10); do
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill -KILL "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
 
           cat server.log
 
@@ -161,8 +171,23 @@ jobs:
           wait
           curl -sf --max-time 10 localhost:8080/api/metrics > /dev/null
 
-          kill -TERM "$SERVER_PID"
-          wait "$SERVER_PID" || true
+          kill -TERM "$SERVER_PID" 2>/dev/null || true
+
+          # Bounded wait, not `wait "$SERVER_PID"` alone: if the server
+          # is genuinely deadlocked (plausible — this is exactly what
+          # TSan's altered thread scheduling is good at surfacing),
+          # SIGTERM may never be processed and an unbounded `wait`
+          # would hang the job indefinitely regardless of every curl
+          # above already having its own timeout. Force-kill after 10s
+          # so this step always terminates.
+          for i in $(seq 1 10); do
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill -KILL "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
 
           cat server.log
 

@@ -36,7 +36,7 @@
   <img src="https://img.shields.io/badge/Clang-support-045891?style=flat&logo=llvm" alt="Clang - support">
 </p>
 
-FalconEye is a live observability dashboard for [FalconHTTP](https://github.com/privateMwb/FalconHTTP) servers — a `Metrics` middleware that records per-request and per-database-call timing into a JSON endpoint, paired with a React dashboard that polls it and renders throughput, error rate, and request-level timing breakdowns in real time.
+FalconEye is a live observability dashboard, currently built for [FalconHTTP](https://github.com/privateMwb/FalconHTTP) servers — a `Metrics` middleware that records per-request and per-database-call timing into a JSON endpoint, paired with a React dashboard that polls it and renders throughput, error rate, and request-level timing breakdowns in real time. The dashboard itself only depends on the `/api/metrics` JSON shape, not on FalconHTTP directly — see [Known Limitations](#known-limitations).
 
 <p align="center">
   <img src="docs/assets/dashboard.png" alt="FalconEye dashboard" width="720">
@@ -256,6 +256,7 @@ npm run build
 
 ## <a id="known-limitations"></a>⚠️ Known Limitations
 
+- **The dashboard is backend-agnostic; the middleware is not.** The React frontend only depends on `/api/metrics`'s JSON shape (`requestCount`, `errorCount`, `avgResponseMs`, `recentRequests[]`) — any backend serving that shape works unmodified. `Metrics.h`, by contrast, is written directly against FalconHTTP's `MiddlewareFn` signature and `Router`/`PathMatcher` APIs; using a different backend framework means reimplementing the middleware against that framework's equivalent hooks, producing the same JSON contract.
 - **`breakdown` only reports database calls, not per-middleware timing.** `Recovery`, `Logger`, and `Cors` are compiled into the untouched `falconhttp/` submodule and have no hook into `timedCall()`'s mechanism — only calls explicitly wrapped at a route-handler call site (like `dbQuery`) show up.
 - **Linux only, currently.** Everything in this project has been built and run on Linux (GCC and Clang). FalconHTTP's socket code hasn't been verified for POSIX-only assumptions, and nothing here has been tested on macOS or MSVC — CI reflects this rather than claiming untested support.
 - **No automated test suite yet.** CI verifies the project builds, is clang-format/clang-tidy clean, and boots correctly under ASan/UBSan/TSan against a handful of real requests — it does not yet run a sanitized test suite, and there is no code coverage reporting as a result.
