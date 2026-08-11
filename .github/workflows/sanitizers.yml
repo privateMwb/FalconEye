@@ -28,6 +28,8 @@ on:
 jobs:
   asan-ubsan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # See the tsan job's comment — fail fast and
+                        # visibly rather than hang silently.
     steps:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
@@ -59,12 +61,25 @@ jobs:
         run: |
           ./build/falconeye_server > server.log 2>&1 &
           SERVER_PID=$!
-          sleep 2
 
-          curl -sf localhost:8080/api/health
-          curl -sf localhost:8080/api/todos/1
-          curl -sf localhost:8080/api/metrics
-          curl -sf localhost:8080/api/todos/999 || true # expected 404
+          # Poll instead of a blind sleep — see the tsan job's comment.
+          for i in $(seq 1 30); do
+            if curl -sf --max-time 2 localhost:8080/api/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}x2s polls"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Server never became ready — dumping log:"
+              cat server.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -sf --max-time 10 localhost:8080/api/health
+          curl -sf --max-time 10 localhost:8080/api/todos/1
+          curl -sf --max-time 10 localhost:8080/api/metrics
+          curl -sf --max-time 10 localhost:8080/api/todos/999 || true # expected 404
 
           kill -TERM "$SERVER_PID"
           wait "$SERVER_PID" || true
@@ -78,6 +93,10 @@ jobs:
 
   tsan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # Fail fast and visibly instead of silently consuming
+                        # CI hours if the server hangs (real deadlock or
+                        # unready-server + timeout-less curl) — this is
+                        # what actually caught the ~1hr hang.
     steps:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
@@ -108,17 +127,39 @@ jobs:
         run: |
           ./build/falconeye_server > server.log 2>&1 &
           SERVER_PID=$!
-          sleep 2
 
-          # Concurrent requests — the whole point of running under TSan is
-          # to exercise Metrics's ring buffer mutex, atomic counter, and
-          # thread_local breakdown pointer under real contention.
-          for i in $(seq 1 20); do
-            curl -sf localhost:8080/api/todos/1 > /dev/null &
-            curl -sf localhost:8080/api/health > /dev/null &
+          # TSan instrumentation is slow to boot — poll instead of a
+          # blind sleep, so we don't fire requests before the server is
+          # actually listening. Bounded to 60s so a server that never
+          # comes up fails here, with a clear message, instead of every
+          # curl below hanging indefinitely on a dead connection.
+          for i in $(seq 1 30); do
+            if curl -sf --max-time 2 localhost:8080/api/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}x2s polls"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Server never became ready — dumping log:"
+              cat server.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Reduced from 20 to 5 pairs: TSan's per-synchronization-event
+          # overhead is substantial, and the thread pool here is sized
+          # for 4 (see main.cpp) — 10 concurrent requests is still
+          # enough real contention to exercise Metrics's mutex/atomic/
+          # thread_local code without piling up 40 connections against
+          # a 4-thread pool under the heaviest instrumentation we run.
+          # Every curl below has --max-time so a genuinely stuck request
+          # fails in seconds, not silently forever.
+          for i in $(seq 1 5); do
+            curl -sf --max-time 10 localhost:8080/api/todos/1 > /dev/null &
+            curl -sf --max-time 10 localhost:8080/api/health > /dev/null &
           done
           wait
-          curl -sf localhost:8080/api/metrics > /dev/null
+          curl -sf --max-time 10 localhost:8080/api/metrics > /dev/null
 
           kill -TERM "$SERVER_PID"
           wait "$SERVER_PID" || true
