@@ -73,8 +73,8 @@ int main() {
     }
 
     MiniDB::Core::Record seedRecord(/*id=*/1);
-    seedRecord.setField("title", JsonPro::Json("Write the FalconEye README"));
-    seedRecord.setField("done", JsonPro::Json(false));
+    (void)seedRecord.setField("title", JsonPro::Json("Write the FalconEye README"));
+    (void)seedRecord.setField("done", JsonPro::Json(false));
     const MiniDB::Common::Status insertStatus = todosTable->insertRecord(seedRecord);
     if (insertStatus != MiniDB::Common::Status::OK) {
         std::cerr << "Failed to seed 'todos' row: " << MiniDB::Common::statusToString(insertStatus)
