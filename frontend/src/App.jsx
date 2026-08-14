@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 import { ChevronRight } from "lucide-react";
 
-const METRICS_URL = "http://localhost:8080/api/metrics";
+const DEFAULT_TARGET = "https://shrtn-kq4g.onrender.com";
+const METRICS_URL = `${new URLSearchParams(window.location.search).get("target") ?? DEFAULT_TARGET}/api/metrics`;
 const POLL_INTERVAL_MS = 3000;
 const RPS_HISTORY_LENGTH = 30;
 
