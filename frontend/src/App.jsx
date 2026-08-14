@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 import { ChevronRight } from "lucide-react";
 
-const DEFAULT_TARGET = "https://shrtn-kq4g.onrender.com";
+// Set via Vite env var, not hardcoded -- lets the default target change
+// (Vercel dashboard edit + redeploy) without a source commit. Falls
+// back to localhost:8080 if unset, for local dev against a server
+// running on the usual port. ?target= in the URL still overrides
+// this at runtime either way, same as before.
+const DEFAULT_TARGET = import.meta.env.VITE_DEFAULT_TARGET || "http://localhost:8080";
 const METRICS_URL = `${new URLSearchParams(window.location.search).get("target") ?? DEFAULT_TARGET}/api/metrics`;
 const POLL_INTERVAL_MS = 3000;
 const RPS_HISTORY_LENGTH = 30;
