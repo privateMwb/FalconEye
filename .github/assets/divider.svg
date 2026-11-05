@@ -1,0 +1,27 @@
+<svg width="1200" height="28" viewBox="0 0 1200 28" xmlns="http://www.w3.org/2000/svg" role="presentation">
+  <defs>
+    <linearGradient id="l" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="r" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F5A623" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#F5A623" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="g" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="0"   y="13" width="548" height="2" rx="1" fill="url(#l)"/>
+  <rect x="652" y="13" width="548" height="2" rx="1" fill="url(#r)"/>
+  <!-- eye mark: ring, pupil, pulse -->
+  <circle cx="600" cy="14" r="10" fill="#0B0E11" stroke="#1F2A33" stroke-width="2"/>
+  <circle cx="600" cy="14" r="10" fill="none" stroke="#5EEAD4" stroke-width="1.5">
+    <animate attributeName="r" values="10;13" dur="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.7;0" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="600" cy="14" r="4.5" fill="#5EEAD4" filter="url(#g)">
+    <animate attributeName="r" values="4.5;5.5;4.5" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+</svg>

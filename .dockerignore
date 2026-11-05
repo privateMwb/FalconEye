@@ -1,0 +1,9 @@
+# Keep the Docker build context small: only backend/ and scripts/ are used.
+.git
+.github
+docs
+frontend
+**/node_modules
+**/build
+**/build-*
+*.md

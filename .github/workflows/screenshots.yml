@@ -1,0 +1,128 @@
+# ============================================================
+# .github/workflows/screenshots.yml
+# Manually triggered. Builds the server and dashboard, runs the demo
+# locally on the runner (server + traffic generator + front door),
+# takes the README screenshot with headless Chromium, uploads it as a
+# downloadable artifact, and opens a pull request that updates
+# docs/images/dashboard.png.
+#
+# Nothing hosted is touched, so it works before (or without) a
+# Render/Vercel deployment.
+#
+# One-time setup for the PR step: Settings -> Actions -> General ->
+# "Allow GitHub Actions to create and approve pull requests".
+# PRs opened with the built-in token do not start other workflows, so
+# the required build checks will not run on it; close and reopen the
+# PR (or merge with your bypass) to get them going.
+# ============================================================
+
+name: Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      open_pr:
+        description: "Open a PR that updates docs/images/dashboard.png"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create the output folder
+        run: mkdir -p docs/images
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the server
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++
+          cmake -S backend -B backend/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFALCONEYE_BUILD_TESTS=OFF
+          cmake --build backend/build --target falconeye_server
+
+      - name: Build the dashboard
+        working-directory: frontend
+        env:
+          VITE_DEFAULT_TARGET: http://localhost:10000
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start the demo and the dashboard
+        run: |
+          PORT=10000 FALCONEYE_BIN="$PWD/backend/build/falconeye_server" \
+            ALLOWED_ORIGINS=http://localhost:4173 \
+            node scripts/demo-server.mjs > demo.log 2>&1 &
+          (cd frontend && npx vite preview --host 127.0.0.1 --port 4173 > ../preview.log 2>&1 &)
+          curl --fail --silent --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:10000/healthz
+          curl --fail --silent --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:4173/ > /dev/null
+
+      - name: Install Playwright
+        run: |
+          mkdir "$RUNNER_TEMP/pw"
+          cp scripts/capture-screenshots.mjs "$RUNNER_TEMP/pw/"
+          cd "$RUNNER_TEMP/pw"
+          npm init -y
+          npm install playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: Capture screenshots
+        working-directory: ${{ runner.temp }}/pw
+        env:
+          DASHBOARD_URL: http://localhost:4173
+          OUT_DIR: ${{ github.workspace }}/docs/images
+        run: node capture-screenshots.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/images/*.png
+          if-no-files-found: warn
+
+      - name: Show the demo logs
+        if: failure()
+        run: |
+          echo "--- demo.log"; cat demo.log || true
+          echo "--- preview.log"; cat preview.log || true
+
+      - name: Open a PR with the screenshots
+        if: ${{ inputs.open_pr }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -f docs/images/_debug-failure.png
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="docs/screenshots-${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+          git add docs/images/*.png
+          if git diff --cached --quiet; then
+            echo "Screenshots are unchanged; no PR needed."
+            exit 0
+          fi
+
+          git commit -m "docs: update dashboard screenshot"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs: update dashboard screenshot" \
+            --body "Screenshot captured by the Screenshots workflow (run ${{ github.run_id }}) from a local build of the demo. Check the image before merging."

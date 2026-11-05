@@ -10,8 +10,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "server/include/**"
-      - "server/src/**"
+      - "backend/include/**"
+      - "backend/src/**"
       - "docs/**"
       - "README.md"
   workflow_dispatch:
@@ -34,9 +34,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        # No submodules needed here — Doxygen only reads server/include,
-        # server/src, and README.md (see docs/Doxyfile's EXCLUDE), never
-        # the third_party/ submodule sources.
+        # No submodules needed here — Doxygen only reads backend/include,
+        # backend/src, and README.md (see docs/Doxyfile's EXCLUDE), never
+        # the external/ submodule sources.
 
       - name: Install Doxygen and Graphviz
         run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
