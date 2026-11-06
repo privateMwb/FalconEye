@@ -41,7 +41,7 @@ jobs:
       # FalconHTTP and MiniDatabase are committed under backend/external/. Recursive
       # submodules are kept on so this keeps working if they become real submodules.
       - name: Checkout (with submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
