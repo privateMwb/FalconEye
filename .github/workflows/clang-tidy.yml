@@ -1,6 +1,6 @@
 # ============================================================
 # .github/workflows/clang-tidy.yml
-# Static analysis on server/include and server/src.
+# Static analysis on backend/include and backend/src.
 #
 # Requires a .clang-tidy config at the repo root to mean
 # anything specific to this project — without one, clang-tidy
@@ -9,7 +9,7 @@
 # before relying on either check being meaningful.
 #
 # Uses compile_commands.json (CMAKE_EXPORT_COMPILE_COMMANDS) so
-# clang-tidy sees the real include paths/flags server/'s build
+# clang-tidy sees the real include paths/flags backend/'s build
 # actually uses, instead of guessing.
 # ============================================================
 
@@ -35,13 +35,13 @@ jobs:
           sudo apt-get install -y cmake ninja-build clang clang-tidy
 
       - name: Configure (generate compile_commands.json)
-        working-directory: server
+        working-directory: backend
         env:
           CXX: clang++
         run: cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Run clang-tidy
-        working-directory: server
+        working-directory: backend
         run: |
           find include src \
             \( -name "*.h" -o -name "*.cpp" \) \

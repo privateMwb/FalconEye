@@ -35,7 +35,7 @@
 #include <ctime>       // std::time_t, std::tm, gmtime_r/gmtime_s
 #include <iomanip>     // std::put_time
 #include <memory>      // std::shared_ptr, std::make_shared
-#include <mutex>       // std::mutex, std::lock_guard
+#include <mutex>       // std::mutex, std::scoped_lock
 #include <sstream>     // std::ostringstream
 #include <string>      // std::string
 #include <string_view> // std::string_view
@@ -60,7 +60,7 @@ inline std::string currentTimestampIso8601() {
     const std::time_t t = std::chrono::system_clock::to_time_t(now);
 
     std::tm utcTm{};
-#if defined(_WIN32)
+#ifdef _WIN32
     gmtime_s(&utcTm, &t);
 #else
     gmtime_r(&t, &utcTm);
@@ -126,7 +126,7 @@ class MetricsRingBuffer {
 
     /// @brief Records one entry, overwriting the oldest slot once full.
     void push(MetricEntry entry) {
-        const std::lock_guard<std::mutex> lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         entries_[writeIndex_] = std::move(entry);
         writeIndex_ = (writeIndex_ + 1) % capacity_;
         if (filled_ < capacity_) {
@@ -144,7 +144,7 @@ class MetricsRingBuffer {
 
     /// @brief Returns all recorded entries, oldest first, newest last.
     [[nodiscard]] VectorPro::Vector<MetricEntry> entries() const {
-        const std::lock_guard<std::mutex> lock(mutex_);
+        const std::scoped_lock lock(mutex_);
 
         VectorPro::Vector<MetricEntry> result(filled_, MetricEntry{});
         if (filled_ < capacity_) {

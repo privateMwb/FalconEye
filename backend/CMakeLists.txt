@@ -2,7 +2,7 @@
 # CMakeLists.txt — FalconEye server
 # ============================================================
 #
-# Top-level build file for server/. Pulls in the two untouched
+# Top-level build file for backend/. Pulls in the two untouched
 # upstream submodules (falconhttp/, minidb/) via add_subdirectory,
 # then builds our own executable against them.
 #
@@ -40,8 +40,8 @@ set(BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 set(BUILD_REGRESSION OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(third_party/falconhttp)
-add_subdirectory(third_party/minidb)
+add_subdirectory(external/falconhttp)
+add_subdirectory(external/minidb)
 
 # ============================================================================
 # FalconEye server executable
@@ -69,3 +69,64 @@ target_link_libraries(
         FalconHTTP
         MiniDB
 )
+
+# ============================================================================
+# Tests
+# ============================================================================
+
+# Named FALCONEYE_BUILD_TESTS, not BUILD_TESTS: the latter is force-set OFF
+# above for the submodules.
+option(FALCONEYE_BUILD_TESTS "Build the FalconEye test suite" ON)
+
+if(FALCONEYE_BUILD_TESTS)
+    file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    )
+
+    add_executable(falconeye_tests ${TEST_SOURCES})
+
+    target_include_directories(
+        falconeye_tests
+        PRIVATE
+            include
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(
+        falconeye_tests
+        PRIVATE
+            FalconHTTP
+            MiniDB
+    )
+endif()
+
+# ============================================================================
+# Fuzz harnesses (built by ClusterFuzzLite; see .clusterfuzzlite/)
+# ============================================================================
+
+# OFF by default: the harnesses need a fuzzing engine to link against, which
+# ClusterFuzzLite provides through $LIB_FUZZING_ENGINE. Every
+# fuzz/fuzz_<name>.cpp becomes its own executable, no edit needed here.
+option(FALCONEYE_BUILD_FUZZERS "Build the libFuzzer harnesses" OFF)
+
+if(FALCONEYE_BUILD_FUZZERS)
+    file(GLOB FUZZ_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/fuzz/fuzz_*.cpp"
+    )
+
+    foreach(fuzz_source ${FUZZ_SOURCES})
+        get_filename_component(fuzz_name ${fuzz_source} NAME_WE)
+
+        add_executable(${fuzz_name} ${fuzz_source})
+
+        target_include_directories(${fuzz_name} PRIVATE include)
+
+        target_link_libraries(
+            ${fuzz_name}
+            PRIVATE
+                FalconHTTP
+                MiniDB
+                $ENV{LIB_FUZZING_ENGINE}
+        )
+    endforeach()
+endif()

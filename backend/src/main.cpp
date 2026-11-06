@@ -56,10 +56,13 @@ int main() {
     // checked against `schema` by validate(). Replace with a real schema
     // once available.
     const MiniDB::Common::Status createStatus = db.createTable(
-        "todos", {
-                     MiniDB::Common::ColumnDef{"title", MiniDB::Common::ColumnType::STRING, false},
-                     MiniDB::Common::ColumnDef{"done", MiniDB::Common::ColumnType::BOOL, false},
-                 });
+        "todos",
+        {
+            MiniDB::Common::ColumnDef{
+                .name = "title", .type = MiniDB::Common::ColumnType::STRING, .nullable = false},
+            MiniDB::Common::ColumnDef{
+                .name = "done", .type = MiniDB::Common::ColumnType::BOOL, .nullable = false},
+        });
     if (createStatus != MiniDB::Common::Status::OK) {
         std::cerr << "Failed to create 'todos' table: "
                   << MiniDB::Common::statusToString(createStatus) << "\n";

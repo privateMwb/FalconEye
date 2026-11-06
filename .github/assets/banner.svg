@@ -1,0 +1,121 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FalconEye: a live observability dashboard for FalconHTTP servers">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0E11"/>
+      <stop offset="100%" stop-color="#12161B"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5EEAD4"/>
+      <stop offset="100%" stop-color="#F5A623"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#F5A623" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#F5A623" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glowBg" cx="78%" cy="50%" r="36%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="75%">
+      <stop offset="60%" stop-color="#0B0E11" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0B0E11" stop-opacity="0.85"/>
+    </radialGradient>
+    <linearGradient id="sweep" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#5EEAD4" stop-opacity="0.55"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.1" fill="#1A1F26"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="eyeClip"><circle cx="960" cy="140" r="92"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <rect width="1200" height="300" fill="url(#dots)"/>
+  <rect width="1200" height="300" fill="url(#glowBg)"/>
+  <rect width="1200" height="300" fill="url(#vignette)"/>
+
+  <!-- Eyebrow: live status -->
+  <circle cx="86" cy="86" r="4.5" fill="#5EEAD4">
+    <animate attributeName="opacity" values="1;0.25;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <text x="102" y="90" font-family="'SF Mono','Cascadia Code',Consolas,'Courier New',monospace"
+        font-size="12" letter-spacing="2.5" fill="#6B7280">LIVE  ·  /API/METRICS  ·  POLLED EVERY 3S</text>
+
+  <!-- Title -->
+  <text x="80" y="170" font-family="'Segoe UI',Helvetica,Arial,sans-serif"
+        font-size="88" font-weight="800" letter-spacing="1" fill="url(#title)" filter="url(#glow)">FalconEye</text>
+  <rect x="82" y="188" width="400" height="3" rx="1.5" fill="url(#rule)"/>
+
+  <!-- Tagline -->
+  <text x="82" y="224" font-family="'Segoe UI',Helvetica,Arial,sans-serif"
+        font-size="19" fill="#9CA3AF">A live observability dashboard for FalconHTTP servers.</text>
+
+  <!-- Feature chips -->
+  <g font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600"
+     letter-spacing="1" text-anchor="middle" fill="#5EEAD4">
+    <rect x="82"  y="244" width="150" height="26" rx="13" fill="#12161B" stroke="#1F2A33"/>
+    <text x="157" y="261">REQUEST TIMING</text>
+    <rect x="244" y="244" width="178" height="26" rx="13" fill="#12161B" stroke="#1F2A33"/>
+    <text x="333" y="261">DB CALL BREAKDOWN</text>
+    <rect x="434" y="244" width="118" height="26" rx="13" fill="#12161B" stroke="#1F2A33"/>
+    <text x="493" y="261">ERROR RATE</text>
+    <rect x="564" y="244" width="146" height="26" rx="13" fill="#12161B" stroke="#1F2A33"/>
+    <text x="637" y="261">LIVE DASHBOARD</text>
+  </g>
+
+  <!-- The eye: radar rings, rotating sweep, request blips -->
+  <g fill="none" stroke="#1F2A33" stroke-width="1.5">
+    <circle cx="960" cy="140" r="92"/>
+    <circle cx="960" cy="140" r="64"/>
+    <circle cx="960" cy="140" r="36"/>
+    <path d="M868 140 H1052 M960 48 V232" stroke-dasharray="3 6"/>
+  </g>
+  <circle cx="960" cy="140" r="92" fill="none" stroke="#5EEAD4" stroke-width="2" opacity="0.7" filter="url(#glow)"/>
+
+  <g clip-path="url(#eyeClip)">
+    <g>
+      <animateTransform attributeName="transform" type="rotate" from="0 960 140" to="360 960 140"
+                        dur="4.8s" repeatCount="indefinite"/>
+      <path d="M960 140 L1052 140 A92 92 0 0 0 1031 81 Z" fill="url(#sweep)"/>
+      <path d="M960 140 L1052 140" stroke="#5EEAD4" stroke-width="2" opacity="0.9"/>
+    </g>
+  </g>
+
+  <!-- Request blips: teal = ok, amber = slow or error -->
+  <circle cx="1002" cy="104" r="4" fill="#5EEAD4" filter="url(#glow)" opacity="0">
+    <animate attributeName="opacity" values="0;1;0" dur="4.8s" begin="0.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="918" cy="168" r="4" fill="#5EEAD4" filter="url(#glow)" opacity="0">
+    <animate attributeName="opacity" values="0;1;0" dur="4.8s" begin="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="1010" cy="180" r="4.5" fill="#F5A623" filter="url(#glow)" opacity="0">
+    <animate attributeName="opacity" values="0;1;0" dur="4.8s" begin="3.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="940" cy="92" r="3.5" fill="#5EEAD4" filter="url(#glow)" opacity="0">
+    <animate attributeName="opacity" values="0;1;0" dur="4.8s" begin="1.3s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Pupil -->
+  <circle cx="960" cy="140" r="9" fill="#0B0E11" stroke="#5EEAD4" stroke-width="2" filter="url(#glow)"/>
+  <circle cx="960" cy="140" r="3" fill="#5EEAD4">
+    <animate attributeName="opacity" values="1;0.4;1" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Readout under the eye -->
+  <text x="960" y="256" text-anchor="middle" font-family="'SF Mono','Cascadia Code',Consolas,'Courier New',monospace"
+        font-size="11" letter-spacing="1.5" fill="#6B7280">GET /api/todos/:id  ·  200  ·  0.27 ms</text>
+
+  <!-- Throughput sparkline, drawn in on a loop -->
+  <path d="M1088 120 L1100 110 L1112 126 L1124 98 L1136 118 L1148 92 L1160 112"
+        fill="none" stroke="#F5A623" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        stroke-dasharray="120" stroke-dashoffset="120">
+    <animate attributeName="stroke-dashoffset" values="120;0;0;120" keyTimes="0;0.5;0.9;1" dur="4.8s" repeatCount="indefinite"/>
+  </path>
+</svg>

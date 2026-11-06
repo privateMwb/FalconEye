@@ -1,0 +1,46 @@
+# ============================================================
+# .github/dependabot.yml
+#
+# - github-actions: keeps workflow action versions current.
+# - npm: keeps frontend/package.json dependencies current.
+# - docker: keeps the ubuntu base image in Dockerfile.demo current.
+# - docker (/.clusterfuzzlite): keeps the pinned OSS-Fuzz base image
+#   digest in .clusterfuzzlite/Dockerfile current.
+#
+# No entry for the C++ dependencies: FalconHTTP and MiniDatabase are
+# committed under backend/external/. Update them by hand.
+# ============================================================
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "npm"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/.clusterfuzzlite"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "docker"

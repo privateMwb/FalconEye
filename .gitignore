@@ -2,7 +2,7 @@
 # .gitignore
 # ============================================================
 
-# --- C++ (server/) -------------------------------------------------
+# --- C++ (backend/) -------------------------------------------------
 
 # CMake build directories
 build*/
@@ -74,7 +74,7 @@ Thumbs.db
 # Release tarballs (downloaded locally for hash verification)
 *.tar.gz
 
-# NOTE: server/third_party/falconhttp/ and server/third_party/minidb/
-# are git submodules (see .gitmodules), not build artifacts — they
-# should NOT be ignored. Their own build output still lands under
-# build*/ above once configured, same as everything else.
+# NOTE: backend/external/falconhttp/ and backend/external/minidb/ hold
+# committed, vendored sources (not build artifacts) — they should NOT be
+# ignored. Their own build output still lands under build*/ above once
+# configured, same as everything else.

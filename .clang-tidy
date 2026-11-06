@@ -1,8 +1,8 @@
 # ============================================================
 # .clang-tidy
-# Scoped to server/include and server/src only (see
+# Scoped to backend/include and backend/src only (see
 # .github/workflows/clang-tidy.yml) — never runs against
-# server/third_party/'s vendored submodule code.
+# backend/external/'s vendored submodule code.
 #
 # Checks below are a moderate, curated set: real bug-catching
 # categories (bugprone, performance, modernize) enabled, with a
@@ -32,7 +32,7 @@ Checks: >
 # misc-include-cleaner is disabled specifically: it demands a direct
 # #include for every symbol used anywhere, even ones already covered
 # by an umbrella header included with a side-comment explaining what
-# it provides (see the include blocks in server/include/*.h) — that
+# it provides (see the include blocks in backend/include/*.h) — that
 # comment-per-include convention is the intentional documentation
 # mechanism here, and satisfying include-cleaner on top of it would
 # mean duplicating that information as redundant direct includes for
@@ -41,8 +41,8 @@ Checks: >
 WarningsAsErrors: ""
 
 CheckOptions:
-  # Matches the naming already used throughout server/include and
-  # server/src: PascalCase types, camelBack functions/variables,
+  # Matches the naming already used throughout backend/include and
+  # backend/src: PascalCase types, camelBack functions/variables,
   # trailing-underscore private members (e.g. buffer_, router_,
   # mutex_, writeIndex_).
   - key: readability-identifier-naming.ClassCase

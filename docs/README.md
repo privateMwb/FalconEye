@@ -1,0 +1,1 @@
+Guides for FalconEye: [Architecture](ARCHITECTURE.md), [Demo](DEMO.md) and [Deployment](DEPLOYMENT.md). The generated API reference (Doxygen, from `Doxyfile`) is published at https://privateMwb.github.io/FalconEye/.

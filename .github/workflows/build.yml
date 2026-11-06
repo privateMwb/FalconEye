@@ -10,10 +10,9 @@
 # MSVC — add those to the matrix once actually verified, rather
 # than claim support that hasn't been checked.
 #
-# No test step: server/ has no tests/ directory yet. Add a
-# "Run tests" step (ctest) once one exists — a build-only
-# workflow without runtime verification is a real, known gap,
-# not a finished CI story.
+# After each build, runs falconeye_tests (backend/tests/): unit
+# tests for the metrics ring buffer, the /api/metrics JSON, and
+# DbTiming. The sanitizer workflow covers the live-server side.
 # ============================================================
 
 name: Build
@@ -60,11 +59,15 @@ jobs:
           sudo apt-get install -y cmake ninja-build g++ clang
 
       - name: Configure
-        working-directory: server
+        working-directory: backend
         env:
           CXX: ${{ matrix.cxx }}
         run: cmake -S . -B build-${{ matrix.compiler }}-${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
-        working-directory: server
+        working-directory: backend
         run: cmake --build build-${{ matrix.compiler }}-${{ matrix.build_type }} --config ${{ matrix.build_type }}
+
+      - name: Run tests
+        working-directory: backend
+        run: ./build-${{ matrix.compiler }}-${{ matrix.build_type }}/falconeye_tests
