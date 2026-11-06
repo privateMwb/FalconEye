@@ -59,20 +59,30 @@
   <img src=".github/assets/divider.svg" alt="" width="100%">
 </p>
 
-<p align="center">FalconEye is a live observability dashboard for <a href="https://github.com/privateMwb/FalconHTTP">FalconHTTP</a> servers. A <code>Metrics</code> middleware records per-request and per-database-call timing, a JSON endpoint serves it, and a React dashboard shows throughput, error counts, and a timing breakdown for every request. The dashboard only depends on the <code>/api/metrics</code> JSON shape, so it can show any backend that serves it.</p>
-
-<p align="center">
-  <img src="docs/images/dashboard.png" alt="FalconEye dashboard showing throughput, request counts, a request log, and a DB timing breakdown" width="360">
-</p>
+<p align="center">FalconEye is a live observability dashboard for <a href="https://github.com/privateMwb/FalconHTTP">FalconHTTP</a> servers, paired with the C++ middleware that feeds it: a <code>Metrics</code> middleware times every request and every database call, a JSON endpoint serves the results, and a React dashboard shows throughput, errors, and a timing breakdown for each request <i>as it happens</i>. The dashboard reads one JSON shape, so it can show any backend that serves it.</p>
 
 <br>
 
 > [!NOTE]
-> **Status: v1.0.0, plus tests, fuzzing and a hosted-demo setup.** The middleware, the
-> `/api/metrics` endpoint and the dashboard are complete, with unit tests, sanitizer runs
-> (ASan, UBSan, TSan) and ClusterFuzzLite fuzzing behind them. The Docker image and the
-> Render + Vercel setup have a CI check (the `Demo image` workflow) but are **not deployed
-> yet**: deploy them from your own accounts (see [Deployment](#deployment)). Linux only so far.
+> **Status: Phase 6 — complete.** The middleware times each request and each database call,
+> `/api/metrics` serves them as JSON, and a responsive dashboard (desktop and phone) shows
+> throughput, errors, and a per-request timing breakdown live. Unit tests, sanitizer runs, and
+> fuzzing run in CI. The hosted-demo Docker image and the Render + Vercel setup are included but
+> **not deployed yet** (see [Deployment](#deployment)). Linux only so far.
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="FalconEye dashboard: throughput, request counts, a request log, and a database timing breakdown" width="360">
+</p>
+
+<details>
+<summary>More screenshots</summary>
+
+<p align="center">
+  <img src="docs/images/dashboard-error.png" alt="An error request (404) opened, with the error count raised" width="320">
+  <img src="docs/images/dashboard-connection-lost.png" alt="Connection lost: the dashboard keeps its last data and shows the URL it could not reach" width="320">
+</p>
+
+</details>
 
 <br>
 
@@ -104,91 +114,137 @@
 
 ## <a id="features"></a>✨ Features
 
-- **Onion-model request timing** — `Metrics` wraps `next()` in FalconHTTP's middleware chain, timing the whole request/response cycle including the matched route handler. It is registered last, so nothing downstream of it goes unmeasured.
+- **Onion-model request timing** — `Metrics` wraps `next()` in FalconHTTP's middleware chain, so its timer covers the whole request/response cycle including the matched route handler. It is registered last: nothing downstream of it goes unmeasured.
 - **Route patterns, not raw paths** — each entry reports `/api/todos/:id`, not `/api/todos/42`, by re-running FalconHTTP's own `PathMatcher::match()` against the live `Router`. No changes to FalconHTTP's source.
-- **Per-request database timing** — `timedCall()` wraps a MiniDB call where the route handler makes it and adds the result to that request's `breakdown`, through a thread-local pointer scoped by `Metrics` around each request. No changes to MiniDB's source.
-- **Thread-safe, bounded memory** — a fixed-capacity ring buffer (50 entries by default, oldest overwritten) behind one mutex, because requests run on a thread pool and concurrent writes are the normal case.
+- **Per-request database timing** — `timedCall()` wraps a MiniDB call where the route handler makes it and adds the result to that request's `breakdown`, through a thread-local pointer that `Metrics` scopes around each request. No changes to MiniDB's source.
+- **Thread-safe, bounded memory** — a fixed-capacity ring buffer (50 entries by default, oldest overwritten) behind one mutex, because requests run on a thread pool and concurrent writes are the normal case, not an edge case.
 - **Exceptions don't lose data** — a handler that throws is still recorded before the exception reaches `Recovery`.
 - **No feedback loop** — the dashboard's own polling of `/api/metrics` is never recorded, so it can't crowd out real traffic or skew the numbers.
 - **A live dashboard, not a static export** — the React page polls every 3 seconds and shows a requests-per-second sparkline, summary stats, a scrollable request log, and a tap-to-open timing breakdown per request.
-- **Backend-agnostic frontend** — the dashboard reads one JSON shape, nothing FalconHTTP-specific, so any server that serves `/api/metrics` in that shape works with it.
-- **Built to run on a phone** — the dashboard is a single column that reads well on a small screen.
-- **Tested, sanitized and fuzzed** — unit tests for the ring buffer, the JSON output and `timedCall()`; ASan, UBSan and TSan runs against the real server; ClusterFuzzLite harnesses on the serialization path.
-- **Ready to host** — a Docker image with its own traffic generator and a read-only front door, plus a Render blueprint and Vercel config.
+- **A dashboard that tells the truth** — if a poll fails it keeps the last data, marks the connection as lost, and shows the exact URL it could not reach, instead of silently freezing or going blank.
+- **Backend-agnostic frontend** — the dashboard depends only on the JSON shape, nothing FalconHTTP-specific, so any server that serves `/api/metrics` in that shape works with it.
+- **Built to run on a phone** — the dashboard is a single responsive column that reads well on a small screen.
+- **Tested, sanitized, and fuzzed** — unit tests for the ring buffer, the JSON output, and `timedCall()`; ASan, UBSan, and TSan runs against the real server; ClusterFuzzLite harnesses on the serialization path.
+- **Ready to host** — a demo image with its own traffic generator and a read-only front door, a Render blueprint, and a Vercel config put the whole thing behind one URL, with the dashboard on Vercel (see [Deployment](#deployment)).
 - **Built on its author's own libraries** — the HTTP server and the embedded database are FalconHTTP and MiniDatabase, both vendored in the repository (see [Stack](#stack)).
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="how-it-works"></a>🧠 How It Works
 
-```
- client ──► FalconHTTP server ──► Recovery ──► Logger ──► Cors ──► Metrics ──► route handler
-                                                                      │             │
-                                         starts a timer and points    │             │ timedCall("dbQuery", ...)
-                                         the thread-local breakdown   │             │ adds a step to the current
-                                         at this request's vector     │             │ request's breakdown
-                                                                      ▼             ▼
-                                                              MetricsRingBuffer (mutex, 50 entries)
-                                                                      │
-                          GET /api/metrics ──► metricsToJson() ◄──────┘
-                                  │
-                                  ▼
-                         React dashboard (polls every 3 s)
+One server process runs FalconHTTP's middleware chain. `Metrics` sits last in it, times each request, and pushes the result into a ring buffer that `GET /api/metrics` serializes for the dashboard.
+
+```mermaid
+flowchart LR
+    C["🌐 Clients"]
+    D["🖥️ Dashboard<br/>React · Vite · Recharts"]
+
+    subgraph S["FalconHTTP server"]
+        direction LR
+        MW["Recovery → Logger → Cors → Metrics"]
+        H["Route handler"]
+        DB["MiniDB"]
+        RB["MetricsRingBuffer<br/>mutex · 50 entries"]
+        API["GET /api/metrics<br/>metricsToJson()"]
+    end
+
+    C -- "requests" --> MW
+    MW -- "next()" --> H
+    H -. "timedCall()" .-> DB
+    MW -- "push entry" --> RB
+    API -- "read" --> RB
+    D -- "poll every 3 s" --> API
 ```
 
-1. **`Metrics` is the last middleware**, so its timer covers the handler and everything the handler calls.
-2. **Before the handler runs**, `Metrics` points a thread-local pointer at a fresh `breakdown` vector. `timedCall()` appends to whatever that pointer addresses, so two requests on two threads never mix their steps.
-3. **After the handler returns, or throws**, `Metrics` builds a `MetricEntry` (matched route pattern, method, status, total time, UTC timestamp, breakdown) and pushes it into the ring buffer.
-4. **`GET /api/metrics`** serializes the buffer, oldest entry first. That route is excluded from recording, so polling never feeds back into the numbers.
-5. **The dashboard** polls the endpoint every 3 seconds and works out requests per second from how much `requestCount` grew.
+What happens to a single request:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant M as Metrics
+    participant H as Handler
+    participant DB as MiniDB
+    participant R as Ring buffer
+    participant D as Dashboard
+
+    C->>M: GET /api/todos/42
+    Note over M: start timer, point the thread-local breakdown at a fresh vector
+    M->>H: next()
+    H->>DB: timedCall("dbQuery", select)
+    DB-->>H: row (duration added to the breakdown)
+    H-->>M: 200 response
+    Note over M: route pattern /api/todos/:id, total time, breakdown
+    M->>R: push MetricEntry
+    D->>M: GET /api/metrics (every 3 s)
+    Note over M: this route is never recorded
+    M-->>D: requestCount, errorCount, avgResponseMs, recentRequests
+```
+
+The request path, the thread-local breakdown, and the trade-offs are written up in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="requirements"></a>📋 Requirements
 
-- A C++23 compiler: GCC or Clang on Linux (nothing else has been tested)
-- CMake 3.20+
-- Node.js 20+ and npm for the dashboard (Node.js 22 for the demo scripts' tests)
-- Docker, only if you want to build the demo image
-- Nothing else to fetch: FalconHTTP and MiniDatabase are committed under `backend/external/`
+- A C++23-conformant compiler (GCC or Clang on Linux) and CMake 3.20+
+- Node.js 20+ for the dashboard (22 for the demo scripts' tests)
+- Nothing to fetch: FalconHTTP and MiniDatabase are committed under `backend/external/`
+- *(Optional)* Docker, to build the hosted-demo image
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="stack"></a>🔗 Stack
 
-| Layer | Technology |
-|---|---|
-| HTTP server, router, middleware | [FalconHTTP](https://github.com/privateMwb/FalconHTTP), vendored in `backend/external/falconhttp/` |
-| Embedded database (what `timedCall()` times) | [MiniDatabase](https://github.com/privateMwb/MiniDatabase), vendored in `backend/external/minidb/` |
-| Metrics middleware | C++23, header-only (`backend/include/`) |
-| Dashboard | React 18, Vite, lucide-react |
-| Hosted-demo front door | Node.js, no npm dependencies (`scripts/demo-server.mjs`) |
+FalconEye is assembled from two libraries, vendored under `backend/external/`:
 
-Both libraries are built from source with `add_subdirectory()`. There is no package manager step, since each one already vendors its own dependencies.
+| Library | Namespace | Role |
+|---|---|---|
+| [FalconHTTP](https://github.com/privateMwb/FalconHTTP) | `FalconHTTP` | HTTP server, router, and the middleware chain `Metrics` is written against |
+| [MiniDatabase](https://github.com/privateMwb/MiniDatabase) | `MiniDB` | The embedded database whose calls `timedCall()` times |
+
+Both are built from source with `add_subdirectory()`; each one vendors its own dependencies, so there is no package manager step. The dashboard is **React 18**, **Vite**, **Recharts** and lucide-react, with no other runtime dependencies.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="installation"></a>📦 Installation
 
+Clone and build the backend:
+
 ```bash
-git clone https://github.com/privateMwb/FalconEye.git
-cd FalconEye
-
-# Backend
-cd backend
-cmake -B build
+git clone https://github.com/privateMwb/FalconEye
+cd FalconEye/backend
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-
-# Dashboard, in another terminal
-cd ../frontend
-npm install
 ```
+
+Then install the dashboard's dependencies, from the repository root:
+
+```bash
+npm --prefix frontend install
+```
+
+Everything lives in memory: there is nothing to initialize, and restarting the server clears the metrics.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="quick-start"></a>🚀 Quick Start
 
-Wiring `Metrics` into a FalconHTTP server:
+The fastest way to see FalconEye work is the example server plus the dashboard. From the repository root, with the backend built:
+
+```bash
+./backend/build/falconeye_server        # the example server on http://localhost:8080
+npm --prefix frontend run dev           # the dashboard on http://localhost:5173
+```
+
+Open <http://localhost:5173>, then send a few requests. The example routes record data only when something calls them:
+
+```bash
+for i in 1 2 3 4 5; do curl -s localhost:8080/api/health localhost:8080/api/todos/1 > /dev/null; done
+```
+
+Follow [docs/DEMO.md](docs/DEMO.md) for a short guided tour.
+
+Prefer your own server? Wire `Metrics` into any FalconHTTP server:
 
 ```cpp
 #include <FalconHTTP/Core/Server.h>
@@ -214,7 +270,7 @@ server.start(8080);
 server.run();
 ```
 
-Timing a database call inside a route handler:
+And time a database call inside a route handler:
 
 ```cpp
 #include "DbTiming.h"
@@ -233,17 +289,12 @@ router.get("/api/todos/:id", [&](const auto& request, auto& response) {
 
 ## <a id="running-the-demo"></a>▶️ Running the Demo
 
-Three terminals give you a live dashboard on your own machine:
+One terminal per process (from the repository root):
 
 ```bash
-# Terminal 1: the example server on :8080
-cd backend && ./build/falconeye_server
-
-# Terminal 2: the dashboard on http://localhost:5173
-cd frontend && npm run dev
-
-# Terminal 3: some traffic (the example routes record data only when called)
-while true; do
+./backend/build/falconeye_server            # the server on :8080
+npm --prefix frontend run dev               # the dashboard on :5173
+while true; do                              # some traffic
   curl -s localhost:8080/api/health > /dev/null
   curl -s localhost:8080/api/todos/1 > /dev/null
   curl -s localhost:8080/api/todos/99 > /dev/null   # 404: counts as an error
@@ -251,25 +302,55 @@ while true; do
 done
 ```
 
-Open `http://localhost:5173` and watch the sparkline move. Stop the server and the dashboard keeps its last data and shows that it lost the connection; start it again and it recovers on the next poll. A guided tour is in [docs/DEMO.md](docs/DEMO.md).
+Watch the sparkline move, tap a `/api/todos/:id` row to see its `dbQuery` step, then stop the server: the dashboard keeps its last data and shows that it lost the connection. Start the server again and it recovers on the next poll.
+
+The hosted demo wraps the same server in one container (see [Docker](#docker)). Its front door reads these environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | The public port (default `10000`, what Render expects) |
+| `ALLOWED_ORIGINS` | Comma-separated dashboard origins that get CORS headers; none by default |
+| `FALCONEYE_BIN` | Path to the server binary (default `/app/falconeye_server`) |
+| `TRAFFIC` | Set to `off` to stop the built-in traffic generator |
+
+The dashboard has one build-time setting, `VITE_DEFAULT_TARGET` (the server's base URL), and one run-time override, `?target=<base url>`.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="dashboard"></a>🖥️ Dashboard
 
-A single-column React page that works on a phone as well as a desktop:
+```bash
+npm --prefix frontend install
+npm --prefix frontend run dev          # http://localhost:5173
+```
 
-- **Header** — a live or connection-lost indicator and the current requests per second.
-- **Throughput** — a sparkline of requests per second over the last 30 polls (about 90 seconds).
-- **Summary** — total requests, errors in the buffered window, and average response time.
-- **Recent requests** — status, method, matched route and duration, newest first. Tap one to see its database timing breakdown.
-- **Connection lost** — if a poll fails, the page keeps the last data it had and shows the URL it could not reach.
+<p align="center"><img src="docs/images/dashboard.png" alt="FalconEye dashboard" width="360"></p>
 
-**Pointing it at a server.** It reads `http://localhost:8080/api/metrics` by default. Override that per build with `VITE_DEFAULT_TARGET` (for example `https://falconeye-demo.onrender.com`), or per visit with `?target=<base url>`. The server's `Cors` middleware must allow the dashboard's origin; the example server allows `http://localhost:5173`.
+**On a phone too:** the page is one column designed for a small screen. The easiest way to see it on a phone is the hosted demo (see [Deployment](#deployment)). Against a local server, the phone's origin would also have to be allowed by the server's `Cors` middleware, which `backend/src/main.cpp` limits to `http://localhost:5173`.
+
+The dashboard reads `http://localhost:8080/api/metrics` by default; point it elsewhere with `VITE_DEFAULT_TARGET` at build time or `?target=` per visit.
+
+| Element | What it shows |
+|---|---|
+| **Header** | A live or *connection lost* indicator, and the current requests per second |
+| **Throughput** | A sparkline of requests per second over the last 30 polls (about 90 s) |
+| **Summary** | Total requests, errors in the buffered window, and average response time |
+| **Recent requests** | Status, method, matched route, and duration, newest first. Tap one for its breakdown |
+| **Timing breakdown** | The steps `timedCall()` recorded for the selected request, each as a bar |
+| **Connection lost** | The last data it had, plus the URL it could not reach |
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="metrics-api"></a>🔌 Metrics API
+
+The server exposes one endpoint for the dashboard and two example routes to give it something to show:
+
+```bash
+curl localhost:8080/api/metrics        # the dashboard's data (never recorded itself)
+curl localhost:8080/api/health         # example: fast, no database call
+curl localhost:8080/api/todos/1        # example: one MiniDB call, so it has a breakdown
+curl localhost:8080/api/todos/99       # example: 404, counts as an error
+```
 
 `GET /api/metrics` returns:
 
@@ -293,36 +374,45 @@ A single-column React page that works on a phone as well as a desktop:
 
 | Field | Meaning |
 |---|---|
-| `requestCount` | Lifetime total of recorded requests, not capped by the buffer. |
-| `errorCount` | Requests with status `>= 400` **within the buffered window only**. |
-| `avgResponseMs` | Mean `totalMs` over the buffered window. |
-| `recentRequests` | The buffered entries, oldest first. |
-| `route` | The matched route *pattern*, not the raw path. |
-| `breakdown` | Steps added by `timedCall()`; an empty array when the handler timed nothing. |
+| `requestCount` | Lifetime total of recorded requests, not capped by the buffer |
+| `errorCount` | Requests with status `>= 400` **within the buffered window only** |
+| `avgResponseMs` | Mean `totalMs` over the buffered window |
+| `recentRequests` | The buffered entries, oldest first |
+| `route` | The matched route *pattern*, not the raw path |
+| `breakdown` | Steps added by `timedCall()`; an empty array when the handler timed nothing |
 
-`/api/health` and `/api/todos/:id` are example routes in `backend/src/routes/ExampleRoutes.h`, there to give the dashboard something to show.
+| Status | Meaning |
+|---|---|
+| `200` | Metrics, health, or a todo |
+| `404` | No such route, or no todo with that id (still recorded, and counted as an error) |
+
+> [!WARNING]
+> `/api/metrics` has **no authentication**: anyone who can reach the port can read recent route patterns, methods, status codes, and timings. Route *patterns* are recorded, never raw paths, query strings, or bodies. See [SECURITY.md](SECURITY.md).
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="live-metrics"></a>📡 Live Metrics
 
-The dashboard polls; nothing is pushed. Every 3 seconds it fetches `/api/metrics` and:
+The dashboard polls; nothing is pushed. You can watch exactly what it sees:
+
+```bash
+curl -s localhost:8080/api/metrics                                   # one snapshot
+watch -n 3 "curl -s localhost:8080/api/metrics | head -c 300"        # what the dashboard does
+```
+
+Every 3 seconds the page fetches the endpoint and:
 
 - **Derives throughput.** The server keeps no history of requests per second, so the page computes `(requestCount − previous requestCount) ÷ 3 s` and keeps the last 30 values for the sparkline.
 - **Keeps working through a failed poll.** On an error it keeps the previous data, marks the connection as lost, and tries again on the next tick.
-- **Reads two kinds of number.** `requestCount` is a lifetime total; `errorCount` and `avgResponseMs` describe only the last 50 requests, so an error scrolls out of the count once 50 newer requests have arrived.
+- **Reads two kinds of number.** `requestCount` is a lifetime total; `errorCount` and `avgResponseMs` describe only the last 50 requests, so an error leaves the count once 50 newer requests have arrived.
 
-```bash
-curl -s localhost:8080/api/metrics | head -c 400
-```
-
-Polling costs one small JSON response per interval and needs no long-lived connection, which keeps the server side to a single route. The trade-off is that a burst shorter than the poll interval is averaged away in the sparkline; the request log still lists every request that is still in the buffer.
+A full 50-entry response is about 13 KB, so polling costs roughly 4.4 KB/s per open dashboard. A burst shorter than the poll interval is averaged away in the sparkline; the request log still lists every request that is in the buffer.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="docker"></a>🐳 Docker
 
-`Dockerfile.demo` builds one image that runs the whole demo backend: the real `falconeye_server`, a traffic generator that keeps the metrics moving, and a read-only front door on a single public port (`10000` by default).
+`Dockerfile.demo` builds one image that runs the whole demo backend: the real `falconeye_server`, a traffic generator that keeps the metrics moving, and a read-only front door on a single public port (`10000` by default):
 
 ```bash
 docker build -f Dockerfile.demo -t falconeye-demo .
@@ -330,18 +420,21 @@ docker run --rm -p 10000:10000 -e ALLOWED_ORIGINS=http://localhost:5173 falconey
 scripts/check-demo.sh http://localhost:10000 http://localhost:5173
 ```
 
-The front door forwards only `GET /api/metrics` and `GET /api/health`, answers `/healthz` itself, and sets CORS headers only for the origins in `ALLOWED_ORIGINS`. The container runs as an unprivileged user and keeps everything in memory. The `Demo image` workflow builds this image and runs `check-demo.sh` against it on every relevant change.
+The front door forwards only `GET /api/metrics` and `GET /api/health`, answers `/healthz` itself, and sets CORS headers only for the origins in `ALLOWED_ORIGINS`. The container runs as an unprivileged user and keeps everything in memory. The C++ server is unchanged inside it: its port and its CORS origin stay hard-coded in `main.cpp`, which is why the front door exists. There is no Compose file, because the demo is one container and the dashboard is hosted separately.
 
-The C++ server is unchanged inside the container: its port and its CORS origin stay hard-coded in `main.cpp`, which is why the front door exists. There is no Docker Compose file, because the demo is a single container and the dashboard is hosted separately.
+> [!CAUTION]
+> **This image has not been deployed by its author.** The `Demo image` workflow builds it and runs `scripts/check-demo.sh` against it in CI. What *was* checked locally: the front door and its helpers (`node --test scripts/tests/`), and `check-demo.sh` against the real server running behind the front door. What was **not** run: the Docker build itself on a developer machine, and a Render deploy. Expect small fixes on the first real run.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="deployment"></a>☁️ Deployment
 
-A hosted demo is a Render service for the backend and a Vercel project for the dashboard:
+FalconEye can run as a **public demo**: the backend (the server, a traffic generator, and a read-only front door) in one container on [Render](https://render.com), and the dashboard on [Vercel](https://vercel.com). The front door puts the whole backend behind one URL and forwards only the dashboard's two routes.
 
-- **Render (backend)** — `render.yaml` builds `Dockerfile.demo`.
-- **Vercel (dashboard)** — import the repo with Root Directory `frontend` and set `VITE_DEFAULT_TARGET` to your Render URL.
+> [!NOTE]
+> **Not deployed yet.** The setup is included and checked in CI, but no live demo exists for this repository. On Render's free plan the service sleeps when idle: the first visit after a quiet spell takes about a minute, and the metrics start again from zero.
+
+To deploy your own copy:
 
 ```bash
 # Render:  New → Blueprint, pick this repo (render.yaml), then set ALLOWED_ORIGINS
@@ -349,10 +442,10 @@ A hosted demo is a Render service for the backend and a Vercel project for the d
 scripts/check-demo.sh https://<your-service>.onrender.com https://<your-dashboard>.vercel.app
 ```
 
-> [!NOTE]
-> On Render's free plan the service sleeps when idle. The first visit afterwards takes about a minute, and the metrics start again from zero.
+The step-by-step guide is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-The step-by-step guide is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Nothing has been deployed from this repository yet, so expect to fix small things on the first run.
+> [!WARNING]
+> A public demo means **anyone can read its metrics and wake the free instance**. That is harmless here, and it is contained: the traffic it records is generated by the container itself, the front door allows only `GET /api/metrics` and `GET /api/health`, answers everything else with `404`, and sets CORS only for `ALLOWED_ORIGINS`. It does not authenticate or rate limit visitors.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
@@ -360,69 +453,33 @@ The step-by-step guide is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Nothing h
 
 ```
 FalconEye/
-├── backend/
-│   ├── include/
-│   │   ├── Metrics.h
-│   │   ├── DbTiming.h
-│   │   └── MetricsJson.h
+├── backend/                C++ backend (CMake)
+│   ├── external/           The two vendored libraries (falconhttp, minidb)
+│   ├── include/            Metrics.h (middleware + ring buffer), DbTiming.h (timedCall),
+│   │                       MetricsJson.h (the /api/metrics JSON)
 │   ├── src/
-│   │   ├── main.cpp
-│   │   └── routes/
-│   │       └── ExampleRoutes.h
-│   ├── tests/
-│   │   ├── suite/unit/
-│   │   ├── support/
-│   │   └── test_main.cpp
-│   ├── fuzz/
-│   │   ├── corpus/
-│   │   ├── fuzz_metrics_json.cpp
-│   │   └── fuzz_db_timing.cpp
-│   ├── external/
-│   │   ├── falconhttp/
-│   │   └── minidb/
-│   └── CMakeLists.txt
+│   │   ├── routes/         ExampleRoutes.h (/api/health, /api/todos/:id)
+│   │   └── main.cpp        Example server: middleware chain + routes on :8080
+│   ├── tests/              Custom-framework suites (unit/)
+│   └── fuzz/               ClusterFuzzLite harnesses (fuzz_*.cpp) and seed corpora
 │
-├── frontend/
-│   ├── src/
-│   │   ├── main.jsx
-│   │   ├── App.jsx
-│   │   └── index.css
-│   ├── index.html
-│   ├── package.json
-│   ├── vercel.json
-│   └── vite.config.js
+├── frontend/               Dashboard: React + Vite + Recharts (see frontend/README.md)
+├── scripts/                demo-server.mjs: the hosted demo's front door + traffic generator
+│                           check-demo.sh: smoke test for a running demo
+│                           capture-screenshots.mjs: README screenshots (Screenshots workflow)
+├── docs/                   ARCHITECTURE.md (how it works), DEMO.md (guided tour),
+│                           DEPLOYMENT.md, images/ (README screenshots)
+├── .clusterfuzzlite/       Fuzzing build: Dockerfile, build.sh, project.yaml
+├── .github/                Workflows, release notes, README assets, CODEOWNERS, Dependabot
 │
-├── scripts/
-│   ├── demo-server.mjs
-│   ├── check-demo.sh
-│   ├── capture-screenshots.mjs
-│   └── tests/
-│
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DEMO.md
-│   ├── DEPLOYMENT.md
-│   ├── Doxyfile
-│   └── images/
-│       └── dashboard.png
-│
-├── .clusterfuzzlite/
-├── .github/
-│   ├── assets/
-│   ├── releases/
-│   ├── workflows/
-│   ├── CODEOWNERS
-│   └── dependabot.yml
-│
-├── Dockerfile.demo
-├── render.yaml
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── SECURITY.md
+├── Dockerfile.demo         Hosted-demo image: server + traffic generator + front door
+├── render.yaml             Render blueprint for the demo backend
 ├── .clang-format
 ├── .clang-tidy
-├── .gitignore
 ├── README.md
+├── CONTRIBUTING.md
+├── CHANGELOG.md
+├── SECURITY.md
 └── LICENSE
 ```
 
@@ -430,111 +487,106 @@ FalconEye/
 
 ## <a id="roadmap"></a>🗺️ Roadmap
 
-Ideas, not commitments. These are the gaps that exist today:
-
-- [ ] **Reject a buffer capacity of 0.** `Metrics(router, 0)` is not validated, and a zero-sized ring buffer divides by zero on the first push.
-- [ ] **Per-middleware timing.** `breakdown` only holds calls wrapped with `timedCall()`; `Recovery`, `Logger` and `Cors` live in the untouched FalconHTTP library and can't report their own time.
-- [ ] **Percentiles.** Show p50, p95 and p99 latency next to the average.
-- [ ] **Authentication for `/api/metrics`**, or a documented reverse-proxy recipe.
-- [ ] **Configurable buffer size and poll interval** without recompiling or rebuilding.
-- [ ] **Other backends.** The dashboard already works with anything that serves the JSON shape; a second middleware implementation would prove it.
-- [ ] **macOS and Windows.** Everything here has only been built and run on Linux.
-- [ ] **Code coverage reporting** for the unit tests.
-- [ ] **Real git submodules** for FalconHTTP and MiniDatabase, instead of committed copies.
+| Phase | Goal | Status |
+|:-:|---|:-:|
+| 0 | Repo scaffold; one build linking FalconHTTP and MiniDatabase | ✅ |
+| 1 | `Metrics` middleware: onion-model timing, route pattern resolution, thread-safe ring buffer | ✅ |
+| 2 | `timedCall()`: per-request database timing through a thread-local breakdown | ✅ |
+| 3 | `GET /api/metrics`: the JSON endpoint, with self-exclusion | ✅ |
+| 4 | React dashboard: polling, throughput sparkline, request log, timing breakdown | ✅ |
+| 5 | Quality: unit tests, sanitizer runs, clang-format and clang-tidy, CodeQL, ClusterFuzzLite | ✅ |
+| 6 | Stretch: hosted demo (Docker image, traffic generator, Render and Vercel setup) | ✅ <sub>not deployed yet</sub> |
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="design-notes"></a>🔬 Design Notes
 
-**Why `Metrics` is registered last.** Middleware runs in an onion: the last one registered sits closest to the handler. Putting `Metrics` there means its timer covers the handler and anything it calls, while `Recovery` and `Logger` stay outside it.
+The numbers below were measured on a Release build of the example server, on a single-core Linux sandbox, over loopback with one keep-alive client. The ring-buffer rows come from a small standalone benchmark. Treat them as orders of magnitude. Full write-up in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Why a thread-local pointer.** A thread pool runs many requests at once, but one request stays on one thread from `Metrics` through its handler. A thread-local pointer lets `timedCall()` find "the current request" without threading an argument through every call, and two requests can never write into each other's breakdown (the `threads_do_not_share_a_breakdown` test checks this).
+| What | Result |
+|---|---|
+| `GET /api/health` (no database call), end to end | median 0.09 ms |
+| `GET /api/todos/1` (one MiniDB call), end to end | median 0.10 ms |
+| `GET /api/metrics` with a full 50-entry buffer | median 0.20 ms, 13 KB |
+| `MetricsRingBuffer::push` | about 50 ns |
+| Copying out 50 entries under the lock | about 6 µs |
 
-**Why the route pattern is recovered, not read.** Recording `/api/todos/42` would give every id its own row. Rather than change FalconHTTP, `Metrics` re-runs `PathMatcher::match()` against the router's registered routes. That costs one extra match per request and needs no change to FalconHTTP.
+Recording a request is cheap next to everything else a request does, and a poll is one small response every 3 seconds. What this does **not** show is the middleware's total overhead: the route-pattern re-match and the timestamp formatting were not measured separately.
 
-**Why one mutex.** Every worker thread writes, and `/api/metrics` reads. The critical section is a copy into a slot plus two integer updates, so a single mutex is simple and cheap at this scale. A lock-free queue would be harder to get right for no measurable gain here.
+**Key decisions**
 
-**Why two kinds of counter.** `requestCount` is a lifetime atomic total. `errorCount` and `avgResponseMs` come from the buffered window. They answer different questions (how many ever, and how healthy lately), and the dashboard labels them accordingly.
+- **`Metrics` is registered last.** Middleware runs as an onion, so the last one registered sits closest to the handler and its timer covers the handler and everything it calls.
+- **A thread-local breakdown pointer.** One request stays on one thread from `Metrics` through its handler, so `timedCall()` can find "the current request" without an argument threaded through every call, and two requests can never write into each other's breakdown.
+- **The route pattern is recovered, not read.** Rather than change FalconHTTP, `Metrics` re-runs `PathMatcher::match()` against the router's registered routes, at the cost of one extra match per request.
+- **One mutex around the ring buffer.** Every worker thread writes and `/api/metrics` reads; the critical section is a copy plus two integer updates, so a single mutex is simple and cheap at this scale.
+- **Polling, not push.** One route and one JSON shape keep the server side trivial and the dashboard backend-agnostic, at the cost of 3-second resolution.
+- **A front door, not a patched server.** The C++ server hard-codes its port and one CORS origin. Instead of changing it, `scripts/demo-server.mjs` answers CORS for the dashboard's real origin and exposes only two read-only routes.
 
-**Why the demo has a front door.** The C++ server hard-codes its port and one CORS origin. Rather than change it, `scripts/demo-server.mjs` listens on the public port, answers CORS for the dashboard's real origin, and exposes only the two read-only routes. It is a few dozen lines of Node with no dependencies.
-
-**Why polling.** One route and one JSON shape keep the server side trivial and make the dashboard backend-agnostic. The cost is a 3-second resolution, which is why the request log, not the sparkline, is the place to look at individual requests.
+**Known limits** — `breakdown` only holds calls wrapped with `timedCall()` (`Recovery`, `Logger`, and `Cors` live in the untouched FalconHTTP library and can't report their own time); `Metrics(router, 0)` is not rejected, and a zero-sized buffer divides by zero on the first push; the buffer is small and in memory, so `errorCount` and `avgResponseMs` describe only the latest 50 requests and everything resets on restart; `/api/metrics` has no authentication; no percentile latencies; Linux only, and nothing has been tried on macOS or MSVC; FalconHTTP and MiniDatabase are committed copies, not real git submodules; no code coverage numbers are collected.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="development"></a>🛠️ Development
 
-**Build and test the backend** (Debug by default):
+**Backend tests** (from `backend/`, after building):
 
 ```bash
-cd backend
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-./build/falconeye_tests            # all suites
-./build/falconeye_tests list       # list the suites
+./build/falconeye_tests              # all suites
+./build/falconeye_tests list         # list suites and categories
+./build/falconeye_tests MetricsJson  # one suite
 ```
 
-**Run the dashboard dev server:**
+**Demo scripts and frontend** (from the repository root):
 
 ```bash
-cd frontend
-npm run dev
+node --test scripts/tests/*.test.mjs    # the hosted demo's front door
+npm --prefix frontend run build
 ```
 
-**Run the demo scripts' tests:**
+**Fuzzing:** every `backend/fuzz/fuzz_<target>.cpp` becomes its own harness with no build-file edit, and its seed inputs go in `backend/fuzz/corpus/fuzz_<target>/`. ClusterFuzzLite runs them for a few minutes on pull requests and for longer every night.
 
-```bash
-node --test scripts/tests/*.test.mjs
-```
-
-**Check formatting and static analysis locally**, the same checks CI runs:
-
-```bash
-find backend/include backend/src \( -name "*.h" -o -name "*.cpp" \) -exec clang-format --dry-run --Werror {} +
-clang-tidy -p backend/build $(find backend/include backend/src -name "*.h" -o -name "*.cpp")
-```
-
-**Fuzz harnesses** are `backend/fuzz/fuzz_<target>.cpp`. Each file becomes its own binary with no build-file edit, and its seed inputs go in `backend/fuzz/corpus/fuzz_<target>/`. ClusterFuzzLite runs them for a few minutes on pull requests and for longer every night.
-
-| Layer | What it covers |
-|---|---|
-| Unit tests | Ring buffer order, wraparound and concurrency; the JSON shape and text round-trips; `timedCall()` and its per-thread isolation |
-| Sanitizers | The real server under ASan + UBSan, then TSan, hit with real requests |
-| Fuzzing | The metrics serialization path and `timedCall()` |
-| Static analysis | clang-tidy and CodeQL |
-| Demo check | `scripts/check-demo.sh` against a running demo |
+Formatting and static analysis are enforced in CI via `.clang-format` and `.clang-tidy`, and the sanitizer workflow runs the real server under ASan/UBSan and under TSan. See [CONTRIBUTING.md](CONTRIBUTING.md) for what CI covers.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="documentation"></a>📖 Documentation
 
-Full API reference, generated with Doxygen from `docs/Doxyfile`:
+| Document | What's inside |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it works: the request path, the thread-local breakdown, the JSON contract, measurements, trade-offs |
+| [docs/DEMO.md](docs/DEMO.md) | A short guided tour: watch throughput, trigger errors, open a breakdown, lose the connection |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Hosting the demo: Render backend, Vercel dashboard, verification, limits |
+| [frontend/README.md](frontend/README.md) | Dashboard internals and design choices |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, tests, code style, and the pull request checklist |
+| [SECURITY.md](SECURITY.md) | Security model, scope, and how to report a vulnerability |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes per release |
 
-**https://privateMwb.github.io/FalconEye/**
-
-Guides in [`docs/`](docs/):
-
-- [Architecture](docs/ARCHITECTURE.md) — the request path, the thread-local breakdown, and the design choices behind them
-- [Demo](docs/DEMO.md) — a short tour of the dashboard
-- [Deployment](docs/DEPLOYMENT.md) — the Render + Vercel setup, step by step
+The generated API reference (Doxygen, from `docs/Doxyfile`) is published at **https://privateMwb.github.io/FalconEye/**.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="contributing"></a>🤝 Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and the checks. In short: run `clang-format`, `clang-tidy` and the test suite locally (see [Development](#development)); CI enforces all three.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, running the tests, code style, and a pull request checklist. In short:
+
+- Run `./build/falconeye_tests` and format C++ with the repo's `.clang-format` — CI runs the tests (also under ASan/UBSan and TSan) and rejects unformatted code
+- For frontend changes, run `npm --prefix frontend run build`
+- If you touch the ring buffer or the thread-local breakdown, say in the pull request how you checked it under concurrent load
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="changelog"></a>📝 Changelog
 
-See [CHANGELOG.md](CHANGELOG.md), and the [Releases](https://github.com/privateMwb/FalconEye/releases) page for release notes.
+Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md); release notes are published on the [Releases](https://github.com/privateMwb/FalconEye/releases) page.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 
 ## <a id="security"></a>🔒 Security
 
-FalconEye is a development and demonstration tool: `/api/metrics` has no authentication or encryption. Read [SECURITY.md](SECURITY.md) before exposing it, and report suspected vulnerabilities privately through the repository's **Security** tab.
+Please don't report a suspected vulnerability in a public issue. Use GitHub's private reporting instead — this repository's **Security** tab, then **Report a vulnerability** — so it can be fixed before it's disclosed. Details are in [SECURITY.md](SECURITY.md).
+
+> [!WARNING]
+> FalconEye is a development and demonstration tool: there is **no authentication or TLS** on `/api/metrics`, and the example server's CORS setting is a browser rule, not access control. Read the security model in [SECURITY.md](SECURITY.md) before running it anywhere but your own machine.
 
 <div align="right"><a href="#-table-of-contents"><img src=".github/assets/back-to-top.svg" alt="Back to top" height="28"></a></div>
 

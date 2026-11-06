@@ -2,9 +2,9 @@
 # .github/workflows/screenshots.yml
 # Manually triggered. Builds the server and dashboard, runs the demo
 # locally on the runner (server + traffic generator + front door),
-# takes the README screenshot with headless Chromium, uploads it as a
-# downloadable artifact, and opens a pull request that updates
-# docs/images/dashboard.png.
+# takes the README screenshots with headless Chromium, uploads them as
+# a downloadable artifact, and opens a pull request that updates the
+# screenshots in docs/images/.
 #
 # Nothing hosted is touched, so it works before (or without) a
 # Render/Vercel deployment.
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       open_pr:
-        description: "Open a PR that updates docs/images/dashboard.png"
+        description: "Open a PR that updates the screenshots in docs/images/"
         type: boolean
         default: true
 
@@ -119,10 +119,10 @@ jobs:
             exit 0
           fi
 
-          git commit -m "docs: update dashboard screenshot"
+          git commit -m "docs: update dashboard screenshots"
           git push origin "$BRANCH"
           gh pr create \
             --base main \
             --head "$BRANCH" \
-            --title "docs: update dashboard screenshot" \
-            --body "Screenshot captured by the Screenshots workflow (run ${{ github.run_id }}) from a local build of the demo. Check the image before merging."
+            --title "docs: update dashboard screenshots" \
+            --body "Screenshots captured by the Screenshots workflow (run ${{ github.run_id }}) from a local build of the demo. Check the images before merging."

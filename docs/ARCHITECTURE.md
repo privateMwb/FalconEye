@@ -77,6 +77,31 @@ The middleware is the part tied to FalconHTTP.
 and derives requests per second from the difference in `requestCount` between polls. The
 target is `VITE_DEFAULT_TARGET` at build time or `?target=` at run time.
 
+## Measurements
+
+Measured on a Release build of the example server on a single-core Linux sandbox, over
+loopback with one keep-alive Python client (600 requests after 50 warm-up requests). The ring
+buffer numbers come from a small standalone benchmark that links `Metrics.h`. Treat them as
+orders of magnitude, not as a benchmark of your hardware.
+
+| What | Result |
+|---|---|
+| `GET /api/health` (no database call), end to end | median 0.09 ms, p99 0.21 ms |
+| `GET /api/todos/1` (one MiniDB call), end to end | median 0.10 ms, p99 0.26 ms |
+| `GET /api/metrics` with a full 50-entry buffer | median 0.20 ms, p99 0.43 ms, 13,240 bytes |
+| Handler time the middleware reports (`totalMs`) | below 0.01 ms for all three routes; `/api/metrics` rounds timings to 3 decimals |
+| `MetricsRingBuffer::push`, one thread | about 48 ns |
+| `MetricsRingBuffer::push`, four threads on one core | about 61 ns (this shows locking overhead, not parallel scaling) |
+| `entries()`: copy out 50 entries under the lock | about 5.7 µs |
+
+What this says: the work the dashboard asks of the server is small. A poll is one 13 KB
+response every 3 seconds, about 4.4 KB/s, and recording a request is dominated by the
+network stack, not by the buffer. What it does **not** say: the middleware's total overhead.
+The route-pattern re-match and the timestamp formatting were not measured separately.
+
+Reproduce the server-side numbers by starting `falconeye_server`, sending bursts of requests,
+and reading the entries back from `/api/metrics`.
+
 ## Quality tooling
 
 | Tool | Where | What it guards |
