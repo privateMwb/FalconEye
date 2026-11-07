@@ -1,13 +1,20 @@
 # ============================================================
 # .github/workflows/screenshots.yml
-# Manually triggered. Builds the server and dashboard, runs the demo
-# locally on the runner (server + traffic generator + front door),
-# takes the README screenshots with headless Chromium, uploads them as
-# a downloadable artifact, and opens a pull request that updates the
-# screenshots in docs/images/.
+# Manually triggered. Opens the dashboard in a headless browser, takes
+# the README screenshots, uploads them as a downloadable artifact, and
+# opens a pull request that updates the screenshots in docs/images/.
 #
-# Nothing hosted is touched, so it works before (or without) a
-# Render/Vercel deployment.
+# Two ways to run it:
+#
+#   - With a dashboard URL (and the backend URL it talks to): captures
+#     your live deployment. The backend is woken up first, because free
+#     Render instances sleep. Nothing on it is changed: the script only
+#     loads the page and blocks its polling to show "connection lost".
+#
+#   - With the dashboard URL left empty: builds the server and the
+#     dashboard on the runner, runs the demo there (server + traffic
+#     generator + front door), and captures that. Works before (or
+#     without) a Render/Vercel deployment.
 #
 # One-time setup for the PR step: Settings -> Actions -> General ->
 # "Allow GitHub Actions to create and approve pull requests".
@@ -21,6 +28,12 @@ name: Screenshots
 on:
   workflow_dispatch:
     inputs:
+      dashboard_url:
+        description: "Dashboard URL (leave empty to build and run the demo on the runner)"
+        default: ""
+      backend_url:
+        description: "Backend URL (woken up before capturing; ignored when the dashboard URL is empty)"
+        default: ""
       open_pr:
         description: "Open a PR that updates the screenshots in docs/images/"
         type: boolean
@@ -34,21 +47,34 @@ jobs:
   capture:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The live dashboard when one is given, otherwise the local preview started below.
+      DASHBOARD_URL: ${{ inputs.dashboard_url != '' && inputs.dashboard_url || 'http://localhost:4173' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Create the output folder
         run: mkdir -p docs/images
 
+      - name: Wake the backend (free Render instances sleep)
+        if: ${{ inputs.dashboard_url != '' && inputs.backend_url != '' }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 20 --retry-delay 10 --retry-all-errors --max-time 60 \
+            "${{ inputs.backend_url }}/healthz"
+
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # --- Local demo: only when no dashboard URL was given -----------------------------------
+
       - name: Build the server
+        if: ${{ inputs.dashboard_url == '' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build g++
@@ -56,6 +82,7 @@ jobs:
           cmake --build backend/build --target falconeye_server
 
       - name: Build the dashboard
+        if: ${{ inputs.dashboard_url == '' }}
         working-directory: frontend
         env:
           VITE_DEFAULT_TARGET: http://localhost:10000
@@ -64,6 +91,7 @@ jobs:
           npm run build
 
       - name: Start the demo and the dashboard
+        if: ${{ inputs.dashboard_url == '' }}
         run: |
           PORT=10000 FALCONEYE_BIN="$PWD/backend/build/falconeye_server" \
             ALLOWED_ORIGINS=http://localhost:4173 \
@@ -71,6 +99,8 @@ jobs:
           (cd frontend && npx vite preview --host 127.0.0.1 --port 4173 > ../preview.log 2>&1 &)
           curl --fail --silent --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:10000/healthz
           curl --fail --silent --retry 30 --retry-delay 2 --retry-connrefused http://127.0.0.1:4173/ > /dev/null
+
+      # -----------------------------------------------------------------------------------------
 
       - name: Install Playwright
         run: |
@@ -84,20 +114,19 @@ jobs:
       - name: Capture screenshots
         working-directory: ${{ runner.temp }}/pw
         env:
-          DASHBOARD_URL: http://localhost:4173
           OUT_DIR: ${{ github.workspace }}/docs/images
         run: node capture-screenshots.mjs
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: docs/images/*.png
           if-no-files-found: warn
 
       - name: Show the demo logs
-        if: failure()
+        if: ${{ failure() && inputs.dashboard_url == '' }}
         run: |
           echo "--- demo.log"; cat demo.log || true
           echo "--- preview.log"; cat preview.log || true
@@ -125,4 +154,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "docs: update dashboard screenshots" \
-            --body "Screenshots captured by the Screenshots workflow (run ${{ github.run_id }}) from a local build of the demo. Check the images before merging."
+            --body "Screenshots captured by the Screenshots workflow (run ${{ github.run_id }}) from ${DASHBOARD_URL}. Check the images before merging."
