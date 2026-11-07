@@ -19,10 +19,25 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci"
+    # Sub-actions of one repo are separate dependencies to Dependabot, so each pair gets a group
+    # that moves it together in ONE PR, for every kind of update (major included). Otherwise one
+    # PR bumps build_fuzzers and leaves run_fuzzers on the old version, or the reverse.
+    # Everything else is grouped for minor and patch bumps only: a major bump gets its own PR, so
+    # it can fail or be postponed without holding back the rest. (A dependency joins the first
+    # group that matches it, which is why the specific groups come first.)
     groups:
       codeql-action:
         patterns:
           - "github/codeql-action/*"
+      clusterfuzzlite:
+        patterns:
+          - "google/clusterfuzzlite/*"
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -30,6 +45,15 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "npm"
+    # Minor and patch bumps share one PR. A major bump gets its own PR, so a breaking release
+    # (for example a new TypeScript major) can't sink the whole group.
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -37,6 +61,10 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "docker"
+    groups:
+      docker:
+        patterns:
+          - "*"
 
   - package-ecosystem: "docker"
     directory: "/.clusterfuzzlite"
@@ -44,3 +72,7 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "docker"
+    groups:
+      docker:
+        patterns:
+          - "*"
