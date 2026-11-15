@@ -52,7 +52,7 @@ jobs:
       DASHBOARD_URL: ${{ inputs.dashboard_url != '' && inputs.dashboard_url || 'http://localhost:4173' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create the output folder
         run: mkdir -p docs/images
